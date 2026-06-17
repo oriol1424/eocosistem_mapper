@@ -13,7 +13,7 @@ def get_llm_response(provider: str, api_key: str, system_prompt: str, user_promp
         if provider == "groq":
             client = Groq(api_key=api_key)
             response = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
