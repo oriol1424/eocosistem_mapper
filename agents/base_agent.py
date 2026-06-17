@@ -50,7 +50,7 @@ class BaseAgent:
         return raw
 
     def _search_and_extract(self, query: str) -> list[dict]:
-        results = search_web(query, max_results=8, tavily_key=self.tavily_key, serper_key=self.serper_key)
+        results = search_web(query, max_results=5, tavily_key=self.tavily_key, serper_key=self.serper_key)
         if not results:
             return []
 

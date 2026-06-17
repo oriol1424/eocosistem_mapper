@@ -143,7 +143,7 @@ def get_queries(categoria: str, zona_info: dict, sectores: list[str] = None) -> 
     plantillas = QUERIES_POR_IDIOMA[idioma]
     nombre = zona_info.get("nombre", "")
     contexto = zona_info.get("contexto", "")
-    zona_busqueda = f"{nombre} {contexto}".strip() if contexto else nombre
+    zona_busqueda = nombre
 
     queries = []
 
