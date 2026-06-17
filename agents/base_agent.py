@@ -1,5 +1,6 @@
 import json
 import re
+import streamlit as st
 from tools.search import search_web, format_results_for_llm
 from tools.llm import get_llm_response
 
@@ -41,6 +42,7 @@ class BaseAgent:
     def _search_and_extract(self, query: str) -> list[dict]:
         results = search_web(query, max_results=8, tavily_key=self.tavily_key, serper_key=self.serper_key)
         if not results:
+            st.warning(f"Sin resultados de búsqueda para: {query}")
             return []
 
         formatted = format_results_for_llm(results)
@@ -51,8 +53,15 @@ class BaseAgent:
             raw = raw.strip()
             raw = re.sub(r"```json|```", "", raw).strip()
             data = json.loads(raw)
-            return data.get("actores", [])
-        except Exception:
+            actores = data.get("actores", [])
+            if not actores:
+                st.info(f"LLM no encontró actores para: {query}")
+            return actores
+        except json.JSONDecodeError as e:
+            st.warning(f"Error JSON en '{query}': {e} | Respuesta LLM: {raw[:300]}")
+            return []
+        except Exception as e:
+            st.warning(f"Error LLM en '{query}': {str(e)}")
             return []
 
     def _deduplicate(self, actores: list[dict]) -> list[dict]:
