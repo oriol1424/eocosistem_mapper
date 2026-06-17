@@ -72,6 +72,15 @@ class BaseAgent:
             st.warning(f"Error LLM en '{query}': {str(e)}")
             return []
 
+    def _run_queries(self, queries: list[str], categoria: str) -> list[dict]:
+        todos = []
+        for q in queries:
+            actores = self._search_and_extract(q)
+            for a in actores:
+                a["categoria"] = categoria
+            todos.extend(actores)
+        return self._deduplicate(todos)
+
     def _deduplicate(self, actores: list[dict]) -> list[dict]:
         seen = set()
         unique = []
@@ -82,5 +91,5 @@ class BaseAgent:
                 unique.append(a)
         return unique
 
-    def run(self, zona: str, nivel: str, sectores: list[str], progress_callback=None) -> list[dict]:
+    def run(self, zona_info: dict, sectores: list[str], progress_callback=None) -> list[dict]:
         raise NotImplementedError("Cada agente debe implementar run()")

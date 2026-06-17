@@ -1,7 +1,6 @@
 import streamlit as st
-import threading
 from datetime import datetime
-
+from tools.geo import buscar_zonas
 from agents.empresas_agent import EmpresasAgent
 from agents.academia_agent import AcademiaAgent
 from agents.administracion_agent import AdministracionAgent
@@ -17,7 +16,7 @@ st.set_page_config(
 st.title("Mapeador de ecosistemas territoriales")
 st.caption("Analiza actores de un territorio y exporta los resultados a Excel")
 
-# ── SIDEBAR: configuración ──────────────────────────────────────────────────
+# ── SIDEBAR ─────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("Configuración")
 
@@ -32,46 +31,66 @@ with st.sidebar:
             "anthropic": "Anthropic / Claude"
         }[x]
     )
-
-    api_key = st.text_input(
-        "Tu API Key",
-        type="password",
-        placeholder="Pega aquí tu API key...",
-        help="Solo se usa durante esta sesión, nunca se guarda."
-    )
-
-    st.caption("🔒 La key desaparece al cerrar el navegador.")
+    api_key = st.text_input("Tu API Key", type="password", placeholder="Pega aquí tu API key...")
+    st.caption("🔒 Solo se usa en esta sesión, nunca se guarda.")
 
     st.divider()
-
     st.subheader("Búsqueda web (opcional)")
-    st.caption("Si no añades keys, se usa DuckDuckGo gratis.")
+    st.caption("Sin keys usa DuckDuckGo gratis.")
     tavily_key = st.text_input("Tavily API Key", type="password", placeholder="tvly-...")
     serper_key = st.text_input("Serper API Key", type="password", placeholder="...")
 
-# ── ZONA GEOGRÁFICA ─────────────────────────────────────────────────────────
+# ── ZONA GEOGRÁFICA CON AUTOCOMPLETE ────────────────────────────────────────
 st.header("1. Define la zona a analizar")
 
-col1, col2 = st.columns([2, 1])
+if "zona_info" not in st.session_state:
+    st.session_state.zona_info = None
+if "zona_texto" not in st.session_state:
+    st.session_state.zona_texto = ""
+
+col1, col2 = st.columns([3, 1])
 with col1:
-    zona = st.text_input(
-        "Zona geográfica",
-        placeholder="Ej: Eixample Barcelona, Comunidad de Madrid, Tarragona...",
-        help="Puedes escribir un barrio, ciudad, comarca, región o país."
-    )
-with col2:
-    nivel = st.selectbox(
-        "Nivel de análisis",
-        ["Barrio", "Distrito", "Ciudad", "Comarca", "Región", "País"]
+    texto_zona = st.text_input(
+        "Escribe una zona geográfica",
+        placeholder="Ej: Montcada, Paraíba, Gràcia...",
+        value=st.session_state.zona_texto,
+        help="Escribe al menos 3 letras para ver sugerencias."
     )
 
-# ── SECTORES PRIORITARIOS ───────────────────────────────────────────────────
+opciones = []
+if len(texto_zona) >= 3:
+    with st.spinner("Buscando zonas..."):
+        opciones = buscar_zonas(texto_zona)
+
+if opciones:
+    labels = [f"{o['display']}  [{o['nivel']}]" for o in opciones]
+    labels.insert(0, "— Selecciona una opción —")
+    seleccion = st.selectbox("Selecciona la zona exacta", labels)
+
+    if seleccion != "— Selecciona una opción —":
+        idx = labels.index(seleccion) - 1
+        st.session_state.zona_info = opciones[idx]
+        zona_info = opciones[idx]
+
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Nivel detectado", zona_info["nivel"])
+        col_b.metric("País", zona_info["pais"])
+        col_c.metric("Idioma de búsqueda", zona_info["idioma"].upper())
+    else:
+        zona_info = None
+elif len(texto_zona) >= 3:
+    st.info("No se encontraron zonas. Prueba con otro nombre.")
+    zona_info = None
+else:
+    zona_info = st.session_state.zona_info
+
+# ── SECTORES ────────────────────────────────────────────────────────────────
 st.header("2. Sectores prioritarios (opcional)")
 st.caption("Deja en blanco para buscar todos los sectores.")
 
 with st.expander("Empresas privadas — sectores a priorizar"):
     sectores_empresas = st.multiselect(
-        "Sectores",
+        "Sectores empresas",
         ["Tecnología e innovación", "Salud y farmacia", "Industria y manufactura",
          "Comercio y retail", "Construcción e inmobiliaria", "Servicios profesionales",
          "Energía y medio ambiente", "Turismo y hostelería",
@@ -81,7 +100,7 @@ with st.expander("Empresas privadas — sectores a priorizar"):
 
 with st.expander("Academia — tipos a priorizar"):
     sectores_academia = st.multiselect(
-        "Tipos",
+        "Tipos academia",
         ["Universidades", "Centros de investigación", "Formación Profesional",
          "Colegios e institutos", "Centros tecnológicos"],
         label_visibility="collapsed"
@@ -89,7 +108,7 @@ with st.expander("Academia — tipos a priorizar"):
 
 with st.expander("Administración pública — tipos a priorizar"):
     sectores_admin = st.multiselect(
-        "Tipos",
+        "Tipos administración",
         ["Ayuntamientos", "Diputaciones y consejos comarcales",
          "Empresas públicas", "Agencias de desarrollo", "Servicios sociales públicos"],
         label_visibility="collapsed"
@@ -97,20 +116,20 @@ with st.expander("Administración pública — tipos a priorizar"):
 
 with st.expander("Sociedad civil — tipos a priorizar"):
     sectores_sociedad = st.multiselect(
-        "Tipos",
+        "Tipos sociedad civil",
         ["ONGs", "Asociaciones vecinales", "Fundaciones",
          "Asociaciones culturales", "Cooperativas"],
         label_visibility="collapsed"
     )
 
-# ── BOTÓN Y EJECUCIÓN ───────────────────────────────────────────────────────
+# ── LANZAR BÚSQUEDA ─────────────────────────────────────────────────────────
 st.divider()
 
 if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
-    if not zona:
-        st.error("Por favor, escribe una zona geográfica.")
+    if not zona_info:
+        st.error("Selecciona una zona del desplegable antes de buscar.")
     elif not api_key:
-        st.error("Por favor, añade tu API key en la barra lateral.")
+        st.error("Añade tu API key en la barra lateral.")
     else:
         resultados = {
             "Empresas privadas": [],
@@ -141,11 +160,11 @@ if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
         for i, (nombre, agente, sectores) in enumerate(agentes):
             estado.info(f"Analizando: **{nombre}** ({i+1}/4)")
 
-            def cb(msg, nom=nombre):
-                log.caption(f"{nom}: {msg}")
+            def cb(msg):
+                log.caption(f"Buscando: {msg}")
 
             try:
-                actores = agente.run(zona, nivel, sectores, progress_callback=cb)
+                actores = agente.run(zona_info, sectores, progress_callback=cb)
                 resultados[nombre] = actores
             except Exception as e:
                 st.warning(f"Error en {nombre}: {str(e)}")
@@ -157,16 +176,12 @@ if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
 
         # ── RESULTADOS ──────────────────────────────────────────────────────
         st.header("Resultados")
-
         total = sum(len(v) for v in resultados.values())
         st.metric("Total de actores encontrados", total)
 
         cols = st.columns(4)
-        categorias = list(resultados.keys())
-        for idx, col in enumerate(cols):
-            with col:
-                cat = categorias[idx]
-                col.metric(cat, len(resultados[cat]))
+        for idx, (cat, actores) in enumerate(resultados.items()):
+            cols[idx].metric(cat, len(actores))
 
         for categoria, actores in resultados.items():
             with st.expander(f"{categoria} — {len(actores)} actores"):
@@ -188,12 +203,11 @@ if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
                 else:
                     st.caption("No se encontraron actores.")
 
-        # ── DESCARGA EXCEL ──────────────────────────────────────────────────
         st.divider()
         fecha = datetime.now().strftime("%Y%m%d_%H%M")
-        nombre_archivo = f"ecosistema_{zona.replace(' ', '_')}_{fecha}.xlsx"
-
-        excel_bytes = exportar_excel(resultados, zona)
+        nombre_zona = zona_info.get("nombre", "zona").replace(" ", "_")
+        nombre_archivo = f"ecosistema_{nombre_zona}_{fecha}.xlsx"
+        excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona))
 
         st.download_button(
             label="Descargar Excel",
