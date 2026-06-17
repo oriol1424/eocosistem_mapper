@@ -40,48 +40,67 @@ with st.sidebar:
     tavily_key = st.text_input("Tavily API Key", type="password", placeholder="tvly-...")
     serper_key = st.text_input("Serper API Key", type="password", placeholder="...")
 
+    st.divider()
+    st.subheader("Autocompletado de zona")
+    geoapify_key = st.text_input(
+        "Geoapify API Key",
+        type="password",
+        placeholder="tu key de geoapify.com",
+        help="Gratis en geoapify.com — 3.000 búsquedas/día. Necesaria para el autocompletado de zonas."
+    )
+
 # ── ZONA GEOGRÁFICA CON AUTOCOMPLETE ────────────────────────────────────────
 st.header("1. Define la zona a analizar")
 
 if "zona_info" not in st.session_state:
     st.session_state.zona_info = None
-if "zona_texto" not in st.session_state:
-    st.session_state.zona_texto = ""
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    texto_zona = st.text_input(
-        "Escribe una zona geográfica",
-        placeholder="Ej: Montcada, Paraíba, Gràcia...",
-        value=st.session_state.zona_texto,
-        help="Escribe al menos 3 letras para ver sugerencias."
-    )
+if not geoapify_key:
+    st.info("Añade tu Geoapify API Key en la barra lateral para activar el autocompletado de zonas.")
 
-opciones = []
-if len(texto_zona) >= 3:
+texto_zona = st.text_input(
+    "Escribe una zona geográfica",
+    placeholder="Ej: Montcada, Paraíba, Gràcia, Lyon...",
+    help="Escribe al menos 3 letras para ver sugerencias."
+)
+
+zona_info = None
+
+if geoapify_key and len(texto_zona) >= 3:
     with st.spinner("Buscando zonas..."):
-        opciones = buscar_zonas(texto_zona)
+        opciones = buscar_zonas(texto_zona, geoapify_key)
 
-if opciones:
-    labels = [f"{o['display']}  [{o['nivel']}]" for o in opciones]
-    labels.insert(0, "— Selecciona una opción —")
-    seleccion = st.selectbox("Selecciona la zona exacta", labels)
+    if opciones:
+        labels = [f"{o['display']}  [{o['nivel']}]" for o in opciones]
+        labels.insert(0, "— Selecciona una opción —")
+        seleccion = st.selectbox("Selecciona la zona exacta", labels)
 
-    if seleccion != "— Selecciona una opción —":
-        idx = labels.index(seleccion) - 1
-        st.session_state.zona_info = opciones[idx]
-        zona_info = opciones[idx]
+        if seleccion != "— Selecciona una opción —":
+            idx = labels.index(seleccion) - 1
+            zona_info = opciones[idx]
+            st.session_state.zona_info = zona_info
 
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Nivel detectado", zona_info["nivel"])
-        col_b.metric("País", zona_info["pais"])
-        col_c.metric("Idioma de búsqueda", zona_info["idioma"].upper())
+            col_a, col_b, col_c = st.columns(3)
+            col_a.metric("Nivel detectado", zona_info["nivel"])
+            col_b.metric("País", zona_info["pais"])
+            col_c.metric("Idioma de búsqueda", zona_info["idioma"].upper())
     else:
-        zona_info = None
-elif len(texto_zona) >= 3:
-    st.info("No se encontraron zonas. Prueba con otro nombre.")
-    zona_info = None
-else:
+        st.warning("No se encontraron zonas. Prueba con otro nombre.")
+
+elif not geoapify_key and len(texto_zona) >= 3:
+    zona_info = {
+        "display": texto_zona,
+        "nombre": texto_zona,
+        "pais": "",
+        "pais_code": "",
+        "nivel": "Ciudad",
+        "idioma": "es",
+        "contexto": "",
+    }
+    st.session_state.zona_info = zona_info
+    st.caption("Usando texto libre sin autocompletado.")
+
+if st.session_state.zona_info and not zona_info:
     zona_info = st.session_state.zona_info
 
 # ── SECTORES ────────────────────────────────────────────────────────────────
@@ -127,9 +146,9 @@ st.divider()
 
 if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
     if not zona_info:
-        st.error("Selecciona una zona del desplegable antes de buscar.")
+        st.error("Selecciona una zona antes de buscar.")
     elif not api_key:
-        st.error("Añade tu API key en la barra lateral.")
+        st.error("Añade tu API key de IA en la barra lateral.")
     else:
         resultados = {
             "Empresas privadas": [],

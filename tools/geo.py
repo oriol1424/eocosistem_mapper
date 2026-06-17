@@ -1,9 +1,6 @@
 import requests
 import time
 
-NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
-NOMINATIM_DETAILS_URL = "https://nominatim.openstreetmap.org/details"
-
 HEADERS = {"User-Agent": "ecosystem-mapper/1.0"}
 
 IDIOMAS_POR_PAIS = {
@@ -15,13 +12,8 @@ IDIOMAS_POR_PAIS = {
     "it": "it",
     "nl": "nl",
     "pl": "pl",
-    "ro": "ro",
     "gb": "en", "us": "en", "au": "en", "ca": "en", "nz": "en", "ie": "en",
-    "cn": "zh", "tw": "zh",
-    "jp": "ja",
-    "kr": "ko",
-    "ru": "ru",
-    "ar_sa": "ar",
+    "cn": "zh", "jp": "ja", "kr": "ko", "ru": "ru",
 }
 
 QUERIES_POR_IDIOMA = {
@@ -63,86 +55,84 @@ QUERIES_POR_IDIOMA = {
 }
 
 
-def buscar_zonas(texto: str) -> list[dict]:
-    if len(texto) < 3:
+def buscar_zonas(texto: str, geoapify_key: str) -> list[dict]:
+    if len(texto) < 3 or not geoapify_key:
         return []
     try:
+        url = "https://api.geoapify.com/v1/geocode/autocomplete"
         params = {
-            "q": texto,
-            "format": "json",
-            "addressdetails": 1,
+            "text": texto,
             "limit": 8,
-            "featuretype": "settlement",
+            "format": "json",
+            "apiKey": geoapify_key,
         }
-        r = requests.get(NOMINATIM_URL, params=params, headers=HEADERS, timeout=5)
-        time.sleep(0.3)
+        r = requests.get(url, params=params, timeout=5)
         data = r.json()
         resultados = []
-        for item in data:
-            addr = item.get("address", {})
-            pais_code = addr.get("country_code", "").lower()
-            tipo_osm = item.get("type", "")
-            clase_osm = item.get("class", "")
-
-            nivel = _inferir_nivel(tipo_osm, clase_osm, addr)
-            nombre_display = _construir_nombre(item, addr)
+        for item in data.get("results", []):
+            props = item
+            pais_code = props.get("country_code", "").lower()
+            nivel = _inferir_nivel(props)
+            nombre_display = _construir_nombre(props)
+            contexto = _construir_contexto(props)
 
             resultados.append({
                 "display": nombre_display,
-                "nombre": item.get("name", texto),
-                "pais": addr.get("country", ""),
+                "nombre": props.get("name") or props.get("city") or props.get("county") or texto,
+                "pais": props.get("country", ""),
                 "pais_code": pais_code,
                 "nivel": nivel,
-                "lat": float(item.get("lat", 0)),
-                "lon": float(item.get("lon", 0)),
+                "lat": props.get("lat", 0),
+                "lon": props.get("lon", 0),
                 "idioma": IDIOMAS_POR_PAIS.get(pais_code, "en"),
-                "contexto": _construir_contexto(addr),
+                "contexto": contexto,
             })
         return resultados
     except Exception:
         return []
 
 
-def _inferir_nivel(tipo_osm: str, clase_osm: str, addr: dict) -> str:
-    if tipo_osm in ["country"]:
+def _inferir_nivel(props: dict) -> str:
+    result_type = props.get("result_type", "")
+    if result_type == "country":
         return "País"
-    if tipo_osm in ["state", "region", "province"]:
+    if result_type in ["state", "region", "province"]:
         return "Región"
-    if tipo_osm in ["county", "municipality"] or clase_osm == "boundary":
+    if result_type == "county":
         return "Comarca"
-    if tipo_osm in ["city", "town"]:
+    if result_type == "city":
         return "Ciudad"
-    if tipo_osm in ["suburb", "quarter", "neighbourhood", "borough", "district"]:
+    if result_type in ["suburb", "district", "borough"]:
         return "Distrito"
-    if tipo_osm in ["village", "hamlet"]:
-        return "Ciudad"
-    if addr.get("suburb") or addr.get("neighbourhood"):
+    if result_type == "neighbourhood":
         return "Barrio"
+    if props.get("suburb"):
+        return "Barrio"
+    if props.get("district"):
+        return "Distrito"
+    if props.get("city"):
+        return "Ciudad"
     return "Ciudad"
 
 
-def _construir_nombre(item: dict, addr: dict) -> str:
+def _construir_nombre(props: dict) -> str:
     partes = []
-    nombre = item.get("name") or item.get("display_name", "").split(",")[0]
-    partes.append(nombre)
-    if addr.get("city") and addr["city"] != nombre:
-        partes.append(addr["city"])
-    elif addr.get("town") and addr["town"] != nombre:
-        partes.append(addr["town"])
-    if addr.get("state") and addr.get("state") != nombre:
-        partes.append(addr["state"])
-    if addr.get("country"):
-        partes.append(addr["country"])
-    return ", ".join(dict.fromkeys(partes))
-
-
-def _construir_contexto(addr: dict) -> str:
-    partes = []
-    for key in ["city", "town", "state", "country"]:
-        val = addr.get(key)
-        if val:
+    for key in ["name", "suburb", "district", "city", "county", "state", "country"]:
+        val = props.get(key)
+        if val and val not in partes:
             partes.append(val)
-    return ", ".join(dict.fromkeys(partes))
+        if len(partes) >= 4:
+            break
+    return ", ".join(partes) if partes else props.get("formatted", "")
+
+
+def _construir_contexto(props: dict) -> str:
+    partes = []
+    for key in ["city", "county", "state", "country"]:
+        val = props.get(key)
+        if val and val not in partes:
+            partes.append(val)
+    return ", ".join(partes)
 
 
 def get_queries(categoria: str, zona_info: dict, sectores: list[str] = None) -> list[str]:
@@ -160,8 +150,7 @@ def get_queries(categoria: str, zona_info: dict, sectores: list[str] = None) -> 
     if categoria == "empresas":
         for t in plantillas["empresas_general"]:
             queries.append(t.format(zona=zona_busqueda))
-        sects = sectores if sectores else []
-        for s in sects[:5]:
+        for s in (sectores or [])[:5]:
             queries.append(plantillas["empresas_sector"].format(sector=s.lower(), zona=zona_busqueda))
 
     elif categoria == "academia":
