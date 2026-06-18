@@ -267,28 +267,7 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             fase_actual += 1
             barra_global.progress(fase_actual / total_fases)
 
-        # ── FASE 3: Enriquecimiento ───────────────────────────────────────
-        if enriquecer:
-            for i, (nombre, _, _) in enumerate(agentes):
-                estado_global.info(f"📍 Enriqueciendo direcciones: **{nombre}**")
-                actores_cat = resultados[nombre]
-                total_cat = len(actores_cat)
 
-                def cb_enrich(idx, total, actor_nombre, n=nombre):
-                    pct = int((idx / total * 100)) if total > 0 else 0
-                    detalle.caption(f"→ {n}: {actor_nombre} ({idx}/{total})")
-
-                try:
-                    resultados[nombre] = enriquecer_lista(
-                        actores_cat, nombre, zona_info,
-                        opencage_key=opencage_key or None,
-                        progress_callback=cb_enrich
-                    )
-                except Exception as e:
-                    st.warning(f"Error enriqueciendo {nombre}: {str(e)}")
-
-                fase_actual += 1
-                barra_global.progress(fase_actual / total_fases)
 
         barra_global.progress(1.0)
         if tokens_agotados:

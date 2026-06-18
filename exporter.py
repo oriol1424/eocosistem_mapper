@@ -21,17 +21,23 @@ COLORES_CABECERA = {
 }
 
 COLUMNAS_POR_CATEGORIA = {
-    "Empresas privadas":         ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación"],
-    "Academia":                  ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación"],
-    "Administración pública":    ["Nombre","Tipo","Descripción","Web","Dirección","Teléfono","Horarios","Ubicación"],
-    "Sociedad civil organizada": ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación"],
+    "Empresas privadas":         ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación","Presencia","Verificación"],
+    "Academia":                  ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación","Presencia","Verificación"],
+    "Administración pública":    ["Nombre","Tipo","Descripción","Web","Dirección","Teléfono","Horarios","Ubicación","Presencia","Verificación"],
+    "Sociedad civil organizada": ["Nombre","Tipo","Sector","Descripción","Web","Dirección","Teléfono","Ubicación","Presencia","Verificación"],
 }
 
 CAMPOS_POR_CATEGORIA = {
-    "Empresas privadas":         ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion"],
-    "Academia":                  ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion"],
-    "Administración pública":    ["nombre","tipo","descripcion","web","direccion","contacto","horarios","ubicacion"],
-    "Sociedad civil organizada": ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion"],
+    "Empresas privadas":         ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion","presencia","verificacion"],
+    "Academia":                  ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion","presencia","verificacion"],
+    "Administración pública":    ["nombre","tipo","descripcion","web","direccion","contacto","horarios","ubicacion","presencia","verificacion"],
+    "Sociedad civil organizada": ["nombre","tipo","sector","descripcion","web","direccion","contacto","ubicacion","presencia","verificacion"],
+}
+
+COLORES_VERIFICACION = {
+    "✅": "E8F5E9",  # verde claro
+    "⚠️": "FFF9C4",  # amarillo claro
+    "❓": "F5F5F5",  # gris claro
 }
 
 
@@ -70,7 +76,7 @@ def _escribir_hoja_datos(ws, categoria, actores, zona):
             cell.fill = PatternFill("solid", fgColor=bg)
             cell.border = borde
 
-    anchos = [30, 22, 22, 50, 35, 35, 20, 20]
+    anchos = [30, 22, 22, 50, 35, 35, 20, 20, 14, 28]
     for col_idx, ancho in enumerate(anchos[:len(columnas)], 1):
         ws.column_dimensions[get_column_letter(col_idx)].width = ancho
 
@@ -151,6 +157,20 @@ def _grafico_pie(ws, data_row_start, data_row_end, col_label, col_val, titulo, a
     ws.add_chart(chart, anchor)
 
 
+def _resumen_verificacion(ws, actores, row, color):
+    """Añade resumen de verificación geográfica al dashboard."""
+    dentro = sum(1 for a in actores if (a.get("verificacion","") or "").startswith("✅"))
+    fuera = sum(1 for a in actores if (a.get("verificacion","") or "").startswith("⚠️"))
+    sin_datos = sum(1 for a in actores if (a.get("verificacion","") or "").startswith("❓"))
+
+    ws.cell(row=row, column=1, value="Verificación geográfica").font = Font(bold=True, size=10, color=color)
+    datos = [("✅ Dentro de zona", dentro), ("⚠️ Fuera — revisar", fuera), ("❓ Sin confirmar", sin_datos)]
+    for i, (label, val) in enumerate(datos):
+        ws.cell(row=row+1+i, column=1, value=label)
+        ws.cell(row=row+1+i, column=2, value=val)
+    return row + 4
+
+
 def _dashboard_empresas(ws, actores, zona, color):
     _celda_titulo(ws, 1, f"Dashboard Empresas Privadas — {zona}", color)
 
@@ -177,6 +197,8 @@ def _dashboard_empresas(ws, actores, zona, color):
     # Gráfico pie tipos
     if len(tipos) > 0:
         _grafico_pie(ws, 7, 7+min(len(tipos)-1,7), 4, 5, "Distribución por tipo", f"J{max_row+2}")
+
+    _resumen_verificacion(ws, actores, 30, color)
 
     ws.column_dimensions["A"].width = 30
     ws.column_dimensions["B"].width = 10

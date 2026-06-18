@@ -42,17 +42,25 @@ JSON exacto:
 {{
   "actores": [
     {{
-      "nombre": "Nombre oficial",
+      "nombre": "Nombre oficial — especificar campus/facultad/delegación si es presencia local",
       "tipo": "tipo específico",
       "descripcion": "Qué hace en 1-2 frases",
       "web": "https://url.com o vacío",
       "sector": "sector principal",
       "ubicacion": "dirección o zona específica confirmada",
       "contacto": "email o teléfono si aparece",
+      "presencia": "sede / campus / delegacion / desconocido",
+      "nota_presencia": "breve explicación de qué tipo de presencia tiene en la zona",
       "extras": {{"categoria": "categoría extra si aplica", "actividad": "descripción"}}
     }}
   ]
 }}
+
+Valores de presencia:
+- "sede": sede principal o única ubicación del actor en la zona
+- "campus": campus, facultad o instalación de una entidad con sede en otro lugar
+- "delegacion": oficina, delegación o punto de atención de entidad con sede fuera
+- "desconocido": no queda claro por el texto
 
 Si no hay actores claramente ubicados en {zona_nombre} devuelve {{"actores": []}}"""
 

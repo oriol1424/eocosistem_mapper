@@ -189,14 +189,80 @@ def enriquecer_actor(actor: dict, categoria: str, zona_info: dict, opencage_key:
     return actor
 
 
+def _verificar_en_zona(actor: dict, zona_info: dict) -> str:
+    """
+    Verifica si el actor está dentro de la zona usando coordenadas.
+    Devuelve: "dentro" / "fuera" / "sin_datos"
+    """
+    import math
+
+    actor_lat = actor.get("lat", 0)
+    actor_lon = actor.get("lon", 0)
+    zona_lat = zona_info.get("lat", 0)
+    zona_lon = zona_info.get("lon", 0)
+
+    if not actor_lat or not actor_lon or not zona_lat or not zona_lon:
+        return "sin_datos"
+
+    # Distancia Haversine en km
+    R = 6371
+    dlat = math.radians(actor_lat - zona_lat)
+    dlon = math.radians(actor_lon - zona_lon)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(zona_lat)) * math.cos(math.radians(actor_lat)) * math.sin(dlon/2)**2
+    distancia = R * 2 * math.asin(math.sqrt(a))
+
+    # Radio según nivel geográfico
+    radios = {
+        "Barrio": 1.5,
+        "Distrito": 4.0,
+        "Ciudad": 20.0,
+        "Comarca": 50.0,
+        "Región": 200.0,
+        "País": 9999.0,
+    }
+    radio = radios.get(zona_info.get("nivel", "Ciudad"), 20.0)
+
+    return "dentro" if distancia <= radio else "fuera"
+
+
+def _construir_verificacion(actor: dict, zona_info: dict) -> str:
+    """Construye el texto de verificación combinando coordenadas y presencia."""
+    geo = _verificar_en_zona(actor, zona_info)
+    presencia = actor.get("presencia", "desconocido")
+    nota = actor.get("nota_presencia", "")
+
+    if geo == "dentro":
+        if presencia == "sede":
+            return f"✅ Sede en zona"
+        elif presencia == "campus":
+            return f"✅ Campus en zona — {nota}" if nota else "✅ Campus en zona"
+        elif presencia == "delegacion":
+            return f"✅ Delegación en zona — {nota}" if nota else "✅ Delegación en zona"
+        else:
+            return "✅ Dentro de zona"
+    elif geo == "fuera":
+        if presencia in ["campus", "delegacion"]:
+            return f"⚠️ {presencia.capitalize()} fuera de zona — revisar"
+        return "⚠️ Fuera de zona — revisar"
+    else:
+        if presencia == "sede":
+            return "❓ Sede — dirección no confirmada"
+        elif presencia == "campus":
+            return f"❓ Campus — {nota}" if nota else "❓ Campus — sin coordenadas"
+        elif presencia == "delegacion":
+            return f"❓ Delegación — {nota}" if nota else "❓ Delegación — sin coordenadas"
+        return "❓ Sin dirección confirmada"
+
+
 def enriquecer_lista(actores: list, categoria: str, zona_info: dict,
                      opencage_key: str = None, progress_callback=None) -> list:
-    """Enriquece una lista de actores con pausas inteligentes."""
+    """Enriquece una lista de actores con pausas inteligentes y verificación geográfica."""
     enriquecidos = []
     total = len(actores)
     for i, actor in enumerate(actores):
         if progress_callback:
             progress_callback(i, total, actor.get("nombre", "")[:40])
         actor = enriquecer_actor(actor, categoria, zona_info, opencage_key)
+        actor["verificacion"] = _construir_verificacion(actor, zona_info)
         enriquecidos.append(actor)
     return enriquecidos
