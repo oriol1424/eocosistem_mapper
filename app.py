@@ -63,6 +63,77 @@ with st.sidebar:
         help="Mejora el enriquecimiento de direcciones."
     )
 
+# ── INSTRUCCIONES ────────────────────────────────────────────────────────────
+with st.expander("📖 Instrucciones y APIs necesarias — léeme antes de empezar"):
+    st.markdown("""
+## Cómo usar el Mapeador de Ecosistemas
+
+Esta herramienta busca automáticamente actores de un ecosistema territorial (empresas, academia, administración pública y sociedad civil) y exporta los resultados a Excel y un dashboard HTML interactivo.
+
+---
+
+### 🤖 APIs de Inteligencia Artificial — el cerebro del agente
+
+El agente necesita un modelo de IA para extraer y clasificar la información. **Elige uno:**
+
+| Proveedor | Coste | Límite gratuito | Registro |
+|---|---|---|---|
+| **Groq** ⭐ Recomendado | Gratuito | 100.000 tokens/día · 6.000/min | [console.groq.com](https://console.groq.com) |
+| **Google Gemini** | Gratuito | 15 req/min · sin límite diario estricto | [aistudio.google.com](https://aistudio.google.com) |
+| **OpenAI** | De pago | Sin tier gratuito | [platform.openai.com](https://platform.openai.com) |
+| **Anthropic** | De pago | Sin tier gratuito | [console.anthropic.com](https://console.anthropic.com) |
+
+> ⚠️ **Con Groq:** si se agotan los tokens diarios la app guarda los resultados parciales y avisa. Los tokens se resetean cada 24h. Si necesitas más búsquedas en el mismo día, usa Gemini como alternativa.
+
+---
+
+### 🔍 APIs de Búsqueda Web — para encontrar actores
+
+Sin estas keys la app usa DuckDuckGo gratis, pero los resultados son menos precisos geográficamente.
+
+| Proveedor | Coste | Límite gratuito | Registro |
+|---|---|---|---|
+| **Serper** ⭐ Recomendado | Gratuito | 2.500 búsquedas/mes | [serper.dev](https://serper.dev) |
+| **Tavily** | Gratuito | 1.000 búsquedas/mes | [tavily.com](https://tavily.com) |
+| **DuckDuckGo** | Gratuito | Sin límite (más lento, sin filtro geográfico) | Sin registro |
+
+> ⭐ **Serper** es el más recomendado porque filtra automáticamente por país e idioma, lo que mejora mucho la precisión geográfica de los resultados.
+
+---
+
+### 🗺️ APIs de Ubicación — para el autocompletado y enriquecimiento
+
+Opcionales pero mejoran mucho la experiencia y la calidad de los datos.
+
+| Proveedor | Para qué sirve | Coste | Registro |
+|---|---|---|---|
+| **Geoapify** | Autocompletado de zonas geográficas en el desplegable | Gratuito · 3.000 req/día | [geoapify.com](https://geoapify.com) |
+| **OpenCage** | Enriquecer actores con dirección y coordenadas exactas | Gratuito · 2.500 req/día | [opencagedata.com](https://opencagedata.com) |
+
+> Sin Geoapify puedes escribir la zona en texto libre. Sin OpenCage el enriquecimiento usa solo OSM Nominatim (más lento).
+
+---
+
+### 🚀 Configuración recomendada para empezar gratis
+
+1. Regístrate en **[console.groq.com](https://console.groq.com)** → API Keys → Create API Key
+2. Regístrate en **[serper.dev](https://serper.dev)** → copia tu API key
+3. Regístrate en **[geoapify.com](https://geoapify.com)** → API Keys → copia tu key
+4. Pega las tres keys en la barra lateral izquierda
+5. Escribe una zona y lanza la búsqueda
+
+Con esta configuración tienes **~3-4 búsquedas completas al día** de forma totalmente gratuita.
+
+---
+
+### ⚠️ Sobre la precisión de los resultados
+
+- Los resultados dependen de lo que hay indexado en internet sobre esa zona
+- Zonas muy específicas (barrios, distritos) pueden tener menos resultados que ciudades enteras
+- La columna **Verificación** en el Excel indica si cada actor está confirmado dentro de la zona
+- Revisa siempre los marcados con ⚠️ antes de presentar los resultados a un cliente
+""")
+
 # ── ZONA GEOGRÁFICA ──────────────────────────────────────────────────────────
 st.header("1. Define la zona a analizar")
 
