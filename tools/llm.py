@@ -3,23 +3,27 @@ import google.generativeai as genai
 from openai import OpenAI
 import anthropic
 
+GROQ_MODEL_SMALL = "llama-3.1-8b-instant"
+GROQ_MODEL_LARGE = "llama-3.3-70b-versatile"
 
-def get_llm_response(provider: str, api_key: str, system_prompt: str, user_prompt: str) -> str:
+
+def get_llm_response(provider: str, api_key: str, system_prompt: str, user_prompt: str, use_large: bool = False) -> str:
     """
-    Llama al LLM seleccionado y devuelve la respuesta como texto.
-    Soporta: groq, openai, gemini, anthropic
+    Llama al LLM seleccionado. Por defecto usa modelo pequeño para ahorrar tokens.
+    use_large=True solo para la llamada final de enriquecimiento.
     """
     try:
         if provider == "groq":
+            model = GROQ_MODEL_LARGE if use_large else GROQ_MODEL_SMALL
             client = Groq(api_key=api_key)
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.2,
-                max_tokens=2000
+                temperature=0.1,
+                max_tokens=1500
             )
             return response.choices[0].message.content
 
@@ -31,8 +35,8 @@ def get_llm_response(provider: str, api_key: str, system_prompt: str, user_promp
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0.2,
-                max_tokens=2000
+                temperature=0.1,
+                max_tokens=1500
             )
             return response.choices[0].message.content
 
@@ -49,7 +53,7 @@ def get_llm_response(provider: str, api_key: str, system_prompt: str, user_promp
             client = anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
-                max_tokens=2000,
+                max_tokens=1500,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}]
             )

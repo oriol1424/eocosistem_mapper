@@ -3,7 +3,6 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-
 CATEGORIAS = [
     "Empresas privadas",
     "Academia",
@@ -11,7 +10,19 @@ CATEGORIAS = [
     "Sociedad civil organizada"
 ]
 
-COLUMNAS = ["Nombre", "Tipo", "Sector", "Descripción", "Web", "Ubicación", "Contacto"]
+COLUMNAS_POR_CATEGORIA = {
+    "Empresas privadas": ["Nombre", "Tipo", "Sector", "Descripción", "Web", "Dirección", "Teléfono", "Ubicación"],
+    "Academia": ["Nombre", "Tipo", "Sector", "Descripción", "Web", "Dirección", "Teléfono", "Ubicación"],
+    "Administración pública": ["Nombre", "Tipo", "Descripción", "Web", "Dirección", "Teléfono", "Horarios", "Ubicación"],
+    "Sociedad civil organizada": ["Nombre", "Tipo", "Sector", "Descripción", "Web", "Dirección", "Teléfono", "Ubicación"],
+}
+
+CAMPOS_POR_CATEGORIA = {
+    "Empresas privadas": ["nombre", "tipo", "sector", "descripcion", "web", "direccion", "contacto", "ubicacion"],
+    "Academia": ["nombre", "tipo", "sector", "descripcion", "web", "direccion", "contacto", "ubicacion"],
+    "Administración pública": ["nombre", "tipo", "descripcion", "web", "direccion", "contacto", "horarios", "ubicacion"],
+    "Sociedad civil organizada": ["nombre", "tipo", "sector", "descripcion", "web", "direccion", "contacto", "ubicacion"],
+}
 
 COLORES_CABECERA = {
     "Empresas privadas":        "1D6FA8",
@@ -21,75 +32,64 @@ COLORES_CABECERA = {
 }
 
 
-def _estilo_cabecera(categoria: str):
-    color = COLORES_CABECERA.get(categoria, "444444")
-    fill = PatternFill("solid", fgColor=color)
-    font = Font(bold=True, color="FFFFFF", size=11)
-    alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    return fill, font, alignment
-
-
 def _borde_fino():
     lado = Side(style="thin", color="CCCCCC")
     return Border(left=lado, right=lado, top=lado, bottom=lado)
 
 
 def exportar_excel(resultados: dict, zona: str) -> bytes:
-    """
-    resultados: dict con clave = categoría, valor = lista de actores
-    Devuelve bytes del Excel para descarga directa en Streamlit.
-    """
     wb = Workbook()
     wb.remove(wb.active)
 
     for categoria in CATEGORIAS:
         actores = resultados.get(categoria, [])
         ws = wb.create_sheet(title=categoria[:31])
+        color = COLORES_CABECERA.get(categoria, "444444")
+        columnas = COLUMNAS_POR_CATEGORIA[categoria]
+        campos = CAMPOS_POR_CATEGORIA[categoria]
 
-        ws.merge_cells("A1:G1")
-        titulo_cell = ws["A1"]
-        titulo_cell.value = f"{categoria} — {zona}"
-        titulo_cell.font = Font(bold=True, size=13, color="FFFFFF")
-        titulo_cell.fill = PatternFill("solid", fgColor=COLORES_CABECERA.get(categoria, "444444"))
-        titulo_cell.alignment = Alignment(horizontal="center", vertical="center")
+        # Título
+        ws.merge_cells(f"A1:{get_column_letter(len(columnas))}1")
+        cell = ws["A1"]
+        cell.value = f"{categoria} — {zona}"
+        cell.font = Font(bold=True, size=13, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 28
 
-        fill, font, alignment = _estilo_cabecera(categoria)
+        # Cabecera
+        fill = PatternFill("solid", fgColor=color)
+        font_cab = Font(bold=True, color="FFFFFF", size=11)
+        align_cab = Alignment(horizontal="center", vertical="center", wrap_text=True)
         borde = _borde_fino()
 
-        for col_idx, col_name in enumerate(COLUMNAS, start=1):
+        for col_idx, col_name in enumerate(columnas, start=1):
             cell = ws.cell(row=2, column=col_idx, value=col_name)
             cell.fill = fill
-            cell.font = font
-            cell.alignment = alignment
+            cell.font = font_cab
+            cell.alignment = align_cab
             cell.border = borde
         ws.row_dimensions[2].height = 22
 
+        # Datos
         for row_idx, actor in enumerate(actores, start=3):
-            fila = [
-                actor.get("nombre", ""),
-                actor.get("tipo", ""),
-                actor.get("sector", ""),
-                actor.get("descripcion", ""),
-                actor.get("web", ""),
-                actor.get("ubicacion", ""),
-                actor.get("contacto", ""),
-            ]
             bg = "F7F7F7" if row_idx % 2 == 0 else "FFFFFF"
-            for col_idx, valor in enumerate(fila, start=1):
-                cell = ws.cell(row=row_idx, column=col_idx, value=valor or "")
+            for col_idx, campo in enumerate(campos, start=1):
+                valor = actor.get(campo, "") or ""
+                cell = ws.cell(row=row_idx, column=col_idx, value=valor)
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
                 cell.fill = PatternFill("solid", fgColor=bg)
                 cell.border = borde
 
-        anchos = [30, 22, 22, 50, 35, 20, 25]
-        for col_idx, ancho in enumerate(anchos, start=1):
+        # Anchos de columna
+        anchos = [30, 22, 22, 50, 35, 35, 20, 20]
+        for col_idx, ancho in enumerate(anchos[:len(columnas)], start=1):
             ws.column_dimensions[get_column_letter(col_idx)].width = ancho
 
         ws.freeze_panes = "A3"
 
         if actores:
-            ws.auto_filter.ref = f"A2:{get_column_letter(len(COLUMNAS))}{len(actores) + 2}"
+            ws.auto_filter.ref = f"A2:{get_column_letter(len(columnas))}{len(actores) + 2}"
 
         if not actores:
             ws.cell(row=3, column=1, value="No se encontraron actores para esta categoría.")

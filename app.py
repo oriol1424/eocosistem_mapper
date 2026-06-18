@@ -1,28 +1,25 @@
 import streamlit as st
 from datetime import datetime
 from tools.geo import buscar_zonas
+from tools.enrichment import enriquecer_lista
 from agents.empresas_agent import EmpresasAgent
 from agents.academia_agent import AcademiaAgent
 from agents.administracion_agent import AdministracionAgent
 from agents.sociedad_agent import SociedadAgent
+from agents.coordinator import coordinar
 from exporter import exportar_excel
 
-st.set_page_config(
-    page_title="Mapeador de Ecosistemas",
-    page_icon="🗺️",
-    layout="wide"
-)
-
-st.title("Mapeador de ecosistemas territoriales")
+st.set_page_config(page_title="Mapeador de Ecosistemas", page_icon="🗺️", layout="wide")
+st.title("🗺️ Mapeador de ecosistemas territoriales")
 st.caption("Analiza actores de un territorio y exporta los resultados a Excel")
 
-# ── SIDEBAR ─────────────────────────────────────────────────────────────────
+# ── SIDEBAR ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("Configuración")
+    st.header("⚙️ Configuración")
 
     st.subheader("Proveedor de IA")
     provider = st.selectbox(
-        "Selecciona tu proveedor",
+        "Proveedor",
         ["groq", "openai", "gemini", "anthropic"],
         format_func=lambda x: {
             "groq": "Groq (gratuito)",
@@ -31,8 +28,8 @@ with st.sidebar:
             "anthropic": "Anthropic / Claude"
         }[x]
     )
-    api_key = st.text_input("Tu API Key", type="password", placeholder="Pega aquí tu API key...")
-    st.caption("🔒 Solo se usa en esta sesión, nunca se guarda.")
+    api_key = st.text_input("API Key de IA", type="password", placeholder="Pega tu key aquí...")
+    st.caption("🔒 Solo se usa en esta sesión.")
 
     st.divider()
     st.subheader("Búsqueda web (opcional)")
@@ -41,27 +38,29 @@ with st.sidebar:
     serper_key = st.text_input("Serper API Key", type="password", placeholder="...")
 
     st.divider()
-    st.subheader("Autocompletado de zona")
+    st.subheader("Ubicación (opcional)")
     geoapify_key = st.text_input(
-        "Geoapify API Key",
+        "Geoapify Key",
         type="password",
-        placeholder="tu key de geoapify.com",
-        help="Gratis en geoapify.com — 3.000 búsquedas/día. Necesaria para el autocompletado de zonas."
+        placeholder="geoapify.com — gratis",
+        help="Activa el autocompletado de zonas."
+    )
+    opencage_key = st.text_input(
+        "OpenCage Key",
+        type="password",
+        placeholder="opencagedata.com — gratis",
+        help="Mejora el enriquecimiento de direcciones."
     )
 
-# ── ZONA GEOGRÁFICA CON AUTOCOMPLETE ────────────────────────────────────────
+# ── ZONA GEOGRÁFICA ──────────────────────────────────────────────────────────
 st.header("1. Define la zona a analizar")
 
 if "zona_info" not in st.session_state:
     st.session_state.zona_info = None
 
-if not geoapify_key:
-    st.info("Añade tu Geoapify API Key en la barra lateral para activar el autocompletado de zonas.")
-
 texto_zona = st.text_input(
     "Escribe una zona geográfica",
     placeholder="Ej: Montcada, Paraíba, Gràcia, Lyon...",
-    help="Escribe al menos 3 letras para ver sugerencias."
 )
 
 zona_info = None
@@ -69,84 +68,83 @@ zona_info = None
 if geoapify_key and len(texto_zona) >= 3:
     with st.spinner("Buscando zonas..."):
         opciones = buscar_zonas(texto_zona, geoapify_key)
-
     if opciones:
         labels = [f"{o['display']}  [{o['nivel']}]" for o in opciones]
         labels.insert(0, "— Selecciona una opción —")
         seleccion = st.selectbox("Selecciona la zona exacta", labels)
-
         if seleccion != "— Selecciona una opción —":
             idx = labels.index(seleccion) - 1
             zona_info = opciones[idx]
             st.session_state.zona_info = zona_info
-
             col_a, col_b, col_c = st.columns(3)
-            col_a.metric("Nivel detectado", zona_info["nivel"])
+            col_a.metric("Nivel", zona_info["nivel"])
             col_b.metric("País", zona_info["pais"])
-            col_c.metric("Idioma de búsqueda", zona_info["idioma"].upper())
+            col_c.metric("Idioma búsqueda", zona_info["idioma"].upper())
     else:
         st.warning("No se encontraron zonas. Prueba con otro nombre.")
 
-elif not geoapify_key and len(texto_zona) >= 3:
+elif len(texto_zona) >= 3:
     zona_info = {
-        "display": texto_zona,
-        "nombre": texto_zona,
-        "pais": "",
-        "pais_code": "",
-        "nivel": "Ciudad",
-        "idioma": "es",
-        "contexto": "",
+        "display": texto_zona, "nombre": texto_zona,
+        "pais": "", "pais_code": "", "nivel": "Ciudad",
+        "idioma": "es", "contexto": "", "lat": 0, "lon": 0,
     }
     st.session_state.zona_info = zona_info
-    st.caption("Usando texto libre sin autocompletado.")
+    st.caption("Modo texto libre — añade Geoapify key para autocompletado.")
 
 if st.session_state.zona_info and not zona_info:
     zona_info = st.session_state.zona_info
 
-# ── SECTORES ────────────────────────────────────────────────────────────────
+# ── SECTORES ─────────────────────────────────────────────────────────────────
 st.header("2. Sectores prioritarios (opcional)")
-st.caption("Deja en blanco para buscar todos los sectores.")
 
-with st.expander("Empresas privadas — sectores a priorizar"):
-    sectores_empresas = st.multiselect(
-        "Sectores empresas",
-        ["Tecnología e innovación", "Salud y farmacia", "Industria y manufactura",
-         "Comercio y retail", "Construcción e inmobiliaria", "Servicios profesionales",
-         "Energía y medio ambiente", "Turismo y hostelería",
-         "Alimentación y agroindustria", "Finanzas y seguros"],
-        label_visibility="collapsed"
-    )
+with st.expander("🏢 Empresas privadas"):
+    sectores_empresas = st.multiselect("Sectores", [
+        "Tecnología e innovación", "Salud y farmacia", "Industria y manufactura",
+        "Comercio y retail", "Construcción e inmobiliaria", "Servicios profesionales",
+        "Energía y medio ambiente", "Turismo y hostelería",
+        "Alimentación y agroindustria", "Finanzas y seguros"
+    ], label_visibility="collapsed")
 
-with st.expander("Academia — tipos a priorizar"):
-    sectores_academia = st.multiselect(
-        "Tipos academia",
-        ["Universidades", "Centros de investigación", "Formación Profesional",
-         "Colegios e institutos", "Centros tecnológicos"],
-        label_visibility="collapsed"
-    )
+with st.expander("🎓 Academia"):
+    sectores_academia = st.multiselect("Tipos", [
+        "Universidades", "Másteres y posgrados", "Doctorado y PhD",
+        "Formación Profesional", "Colegios e institutos",
+        "Centros de investigación", "Centros tecnológicos"
+    ], label_visibility="collapsed")
 
-with st.expander("Administración pública — tipos a priorizar"):
-    sectores_admin = st.multiselect(
-        "Tipos administración",
-        ["Ayuntamientos", "Diputaciones y consejos comarcales",
-         "Empresas públicas", "Agencias de desarrollo", "Servicios sociales públicos"],
-        label_visibility="collapsed"
-    )
+with st.expander("🏛️ Administración pública"):
+    sectores_admin = st.multiselect("Tipos", [
+        "Ayuntamientos", "Diputaciones y consejos",
+        "Empresas públicas", "Agencias de desarrollo",
+        "Servicios sociales", "Bibliotecas y centros cívicos"
+    ], label_visibility="collapsed")
 
-with st.expander("Sociedad civil — tipos a priorizar"):
-    sectores_sociedad = st.multiselect(
-        "Tipos sociedad civil",
-        ["ONGs", "Asociaciones vecinales", "Fundaciones",
-         "Asociaciones culturales", "Cooperativas"],
-        label_visibility="collapsed"
-    )
+with st.expander("🤝 Sociedad civil"):
+    sectores_sociedad = st.multiselect("Tipos", [
+        "ONGs", "Asociaciones vecinales", "Fundaciones",
+        "Asociaciones culturales", "Cooperativas", "Voluntariado"
+    ], label_visibility="collapsed")
 
-# ── LANZAR BÚSQUEDA ─────────────────────────────────────────────────────────
+with st.expander("⚙️ Opciones avanzadas"):
+    enriquecer = st.toggle("Enriquecer con direcciones", value=True,
+        help="Usa OSM y OpenCage para añadir direcciones y teléfonos.")
+    usar_coordinador = st.toggle("Usar agente coordinador", value=True,
+        help="Revisa y corrige clasificaciones entre categorías al final.")
+
+# ── LANZAR ────────────────────────────────────────────────────────────────────
 st.divider()
 
-if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
+ICONOS = {
+    "Empresas privadas": "🏢",
+    "Academia": "🎓",
+    "Administración pública": "🏛️",
+    "Sociedad civil organizada": "🤝",
+}
+
+if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True):
     if not zona_info:
-        st.error("Selecciona una zona antes de buscar.")
+        st.error("Escribe y selecciona una zona antes de buscar.")
     elif not api_key:
         st.error("Añade tu API key de IA en la barra lateral.")
     else:
@@ -157,9 +155,22 @@ if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
             "Sociedad civil organizada": []
         }
 
-        progreso = st.progress(0)
-        estado = st.empty()
-        log = st.empty()
+        # ── UI de progreso ────────────────────────────────────────────────
+        barra_global = st.progress(0)
+        estado_global = st.empty()
+
+        col_e, col_a, col_ad, col_s = st.columns(4)
+        indicadores = {
+            "Empresas privadas":        col_e.empty(),
+            "Academia":                 col_a.empty(),
+            "Administración pública":   col_ad.empty(),
+            "Sociedad civil organizada":col_s.empty(),
+        }
+        for cat, ind in indicadores.items():
+            ind.markdown(f"{ICONOS[cat]} **{cat.split()[0]}**\n\n⬜ Pendiente")
+
+        detalle = st.empty()
+        contador = st.empty()
 
         agentes = [
             ("Empresas privadas",
@@ -176,62 +187,98 @@ if st.button("Iniciar búsqueda", type="primary", use_container_width=True):
              sectores_sociedad),
         ]
 
-        for i, (nombre, agente, sectores) in enumerate(agentes):
-            estado.info(f"Analizando: **{nombre}** ({i+1}/4)")
+        total_fases = len(agentes) + (len(agentes) if enriquecer else 0) + (1 if usar_coordinador else 0)
+        fase_actual = 0
 
-            def cb(msg):
-                log.caption(f"Buscando: {msg}")
+        # ── FASE 1: Búsqueda ──────────────────────────────────────────────
+        for i, (nombre, agente, sectores) in enumerate(agentes):
+            indicadores[nombre].markdown(f"{ICONOS[nombre]} **{nombre.split()[0]}**\n\n🔄 Buscando...")
+            estado_global.info(f"🔍 Buscando actores: **{nombre}**")
+            total_encontrados = sum(len(v) for v in resultados.values())
+            contador.metric("Actores encontrados", total_encontrados)
+
+            def cb_busqueda(msg, n=nombre):
+                detalle.caption(f"→ {msg}")
 
             try:
-                actores = agente.run(zona_info, sectores, progress_callback=cb)
+                actores = agente.run(zona_info, sectores, progress_callback=cb_busqueda)
                 resultados[nombre] = actores
+                indicadores[nombre].markdown(f"{ICONOS[nombre]} **{nombre.split()[0]}**\n\n✅ {len(actores)} actores")
             except Exception as e:
                 st.warning(f"Error en {nombre}: {str(e)}")
+                indicadores[nombre].markdown(f"{ICONOS[nombre]} **{nombre.split()[0]}**\n\n⚠️ Error")
 
-            progreso.progress((i + 1) / 4)
+            fase_actual += 1
+            barra_global.progress(fase_actual / total_fases)
+            total_encontrados = sum(len(v) for v in resultados.values())
+            contador.metric("Actores encontrados", total_encontrados)
 
-        estado.success("Búsqueda completada")
-        log.empty()
+        # ── FASE 2: Coordinador ───────────────────────────────────────────
+        if usar_coordinador:
+            estado_global.info("🔄 Coordinador revisando clasificaciones...")
+            detalle.caption("→ Revisando actores mal clasificados entre categorías...")
+            try:
+                resultados = coordinar(resultados, provider, api_key)
+                detalle.caption("→ Clasificaciones corregidas")
+            except Exception as e:
+                st.warning(f"Error en coordinador: {str(e)}")
+            fase_actual += 1
+            barra_global.progress(fase_actual / total_fases)
 
-        # ── RESULTADOS ──────────────────────────────────────────────────────
+        # ── FASE 3: Enriquecimiento ───────────────────────────────────────
+        if enriquecer:
+            for i, (nombre, _, _) in enumerate(agentes):
+                estado_global.info(f"📍 Enriqueciendo direcciones: **{nombre}**")
+                actores_cat = resultados[nombre]
+                total_cat = len(actores_cat)
+
+                def cb_enrich(idx, total, actor_nombre, n=nombre):
+                    pct = int((idx / total * 100)) if total > 0 else 0
+                    detalle.caption(f"→ {n}: {actor_nombre} ({idx}/{total})")
+
+                try:
+                    resultados[nombre] = enriquecer_lista(
+                        actores_cat, nombre, zona_info,
+                        opencage_key=opencage_key or None,
+                        progress_callback=cb_enrich
+                    )
+                except Exception as e:
+                    st.warning(f"Error enriqueciendo {nombre}: {str(e)}")
+
+                fase_actual += 1
+                barra_global.progress(fase_actual / total_fases)
+
+        barra_global.progress(1.0)
+        estado_global.success("✅ Búsqueda completada")
+        detalle.empty()
+
+        total_final = sum(len(v) for v in resultados.values())
+        contador.metric("Actores encontrados", total_final)
+
+        # ── RESULTADOS ────────────────────────────────────────────────────
         st.header("Resultados")
-        total = sum(len(v) for v in resultados.values())
-        st.metric("Total de actores encontrados", total)
 
         cols = st.columns(4)
         for idx, (cat, actores) in enumerate(resultados.items()):
-            cols[idx].metric(cat, len(actores))
+            cols[idx].metric(f"{ICONOS[cat]} {cat.split()[0]}", len(actores))
 
         for categoria, actores in resultados.items():
-            with st.expander(f"{categoria} — {len(actores)} actores"):
+            with st.expander(f"{ICONOS[categoria]} {categoria} — {len(actores)} actores"):
                 if actores:
-                    st.dataframe(
-                        actores,
-                        use_container_width=True,
-                        column_config={
-                            "nombre": "Nombre",
-                            "tipo": "Tipo",
-                            "sector": "Sector",
-                            "descripcion": "Descripción",
-                            "web": st.column_config.LinkColumn("Web"),
-                            "ubicacion": "Ubicación",
-                            "contacto": "Contacto",
-                            "categoria": None
-                        }
-                    )
+                    st.dataframe(actores, use_container_width=True)
                 else:
                     st.caption("No se encontraron actores.")
 
+        # ── DESCARGA ──────────────────────────────────────────────────────
         st.divider()
         fecha = datetime.now().strftime("%Y%m%d_%H%M")
         nombre_zona = zona_info.get("nombre", "zona").replace(" ", "_")
-        nombre_archivo = f"ecosistema_{nombre_zona}_{fecha}.xlsx"
         excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona))
 
         st.download_button(
-            label="Descargar Excel",
+            label="📥 Descargar Excel",
             data=excel_bytes,
-            file_name=nombre_archivo,
+            file_name=f"ecosistema_{nombre_zona}_{fecha}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             type="primary",
             use_container_width=True

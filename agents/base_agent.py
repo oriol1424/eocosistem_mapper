@@ -4,33 +4,34 @@ import streamlit as st
 from tools.search import search_web, format_results_for_llm
 from tools.llm import get_llm_response
 
-
 SYSTEM_PROMPT = """Eres un experto en análisis de ecosistemas territoriales.
-Tu tarea es extraer información estructurada sobre actores de un ecosistema a partir de resultados de búsqueda web.
-Siempre responde ÚNICAMENTE con JSON válido y estricto, sin texto adicional, sin markdown, sin explicaciones.
-IMPORTANTE: No uses caracteres de escape innecesarios. Las URLs deben escribirse tal cual, sin barras invertidas."""
+Extrae información estructurada sobre actores a partir de resultados de búsqueda web.
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin explicaciones.
+No uses caracteres de escape innecesarios. URLs sin barras invertidas."""
 
-EXTRACTION_PROMPT = """A partir de los siguientes resultados de búsqueda sobre "{query}", extrae todos los actores relevantes.
+EXTRACTION_PROMPT = """Resultados de búsqueda sobre "{query}":
 
-Resultados:
 {results}
 
-Devuelve un JSON con esta estructura exacta (sin escape de caracteres, sin markdown):
+Extrae TODOS los actores identificables. Para empresas indica si es startup, pyme, multinacional, cooperativa o autónomo cuando puedas inferirlo.
+Para academia indica si es universidad, máster, doctorado, FP, instituto u otro centro.
+
+JSON con esta estructura exacta:
 {{
   "actores": [
     {{
-      "nombre": "Nombre oficial de la organización",
-      "tipo": "tipo específico (ej: empresa tecnológica, universidad pública, ONG ambiental...)",
-      "descripcion": "Descripción breve de 1-2 frases de qué hace",
-      "web": "https://ejemplo.com",
-      "sector": "sector o área de actividad principal",
-      "ubicacion": "ciudad o zona específica si se menciona",
-      "contacto": "email o teléfono si aparece, sino dejar vacío"
+      "nombre": "Nombre oficial",
+      "tipo": "tipo específico (startup, pyme, universidad pública, ONG...)",
+      "descripcion": "Qué hace en 1-2 frases",
+      "web": "https://url.com o vacío",
+      "sector": "sector principal",
+      "ubicacion": "zona específica si se menciona",
+      "contacto": "email o teléfono si aparece"
     }}
   ]
 }}
 
-Incluye solo actores claramente identificados. Si no hay actores relevantes, devuelve {{"actores": []}}"""
+Si no hay actores claramente identificados devuelve {{"actores": []}}"""
 
 
 class BaseAgent:
@@ -58,7 +59,7 @@ class BaseAgent:
         user_prompt = EXTRACTION_PROMPT.format(query=query, results=formatted)
 
         try:
-            raw = get_llm_response(self.provider, self.api_key, SYSTEM_PROMPT, user_prompt)
+            raw = get_llm_response(self.provider, self.api_key, SYSTEM_PROMPT, user_prompt, use_large=False)
             raw = self._clean_json(raw)
             data = json.loads(raw)
             return data.get("actores", [])
@@ -71,15 +72,6 @@ class BaseAgent:
         except Exception as e:
             st.warning(f"Error LLM en '{query}': {str(e)}")
             return []
-
-    def _run_queries(self, queries: list[str], categoria: str) -> list[dict]:
-        todos = []
-        for q in queries:
-            actores = self._search_and_extract(q)
-            for a in actores:
-                a["categoria"] = categoria
-            todos.extend(actores)
-        return self._deduplicate(todos)
 
     def _deduplicate(self, actores: list[dict]) -> list[dict]:
         seen = set()
