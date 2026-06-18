@@ -58,14 +58,27 @@ class BaseAgent:
         raw = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'/', raw)
         return raw
 
-    def _search_and_extract(self, query: str, zona_info: dict) -> list[dict]:
+    def _search_and_extract(self, query: str, zona_info: dict, log: list = None) -> list[dict]:
+        import datetime
         results = search_web(
             query, max_results=5,
             tavily_key=self.tavily_key,
             serper_key=self.serper_key,
             zona_info=zona_info
         )
+
+        entrada_log = {
+            "query": query,
+            "resultados_web": len(results),
+            "actores_extraidos": 0,
+            "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
+            "estado": "ok"
+        }
+
         if not results:
+            entrada_log["estado"] = "sin resultados"
+            if log is not None:
+                log.append(entrada_log)
             return []
 
         formatted = format_results_for_llm(results)
@@ -82,14 +95,28 @@ class BaseAgent:
             raw = get_llm_response(self.provider, self.api_key, SYSTEM_PROMPT, user_prompt, use_large=False)
             raw = self._clean_json(raw)
             data = json.loads(raw)
-            return data.get("actores", [])
+            actores = data.get("actores", [])
+            entrada_log["actores_extraidos"] = len(actores)
+            if log is not None:
+                log.append(entrada_log)
+            return actores
         except json.JSONDecodeError:
             try:
                 data = json.loads(raw, strict=False)
-                return data.get("actores", [])
+                actores = data.get("actores", [])
+                entrada_log["actores_extraidos"] = len(actores)
+                if log is not None:
+                    log.append(entrada_log)
+                return actores
             except Exception:
+                entrada_log["estado"] = "error JSON"
+                if log is not None:
+                    log.append(entrada_log)
                 return []
         except Exception as e:
+            entrada_log["estado"] = f"error: {str(e)[:50]}"
+            if log is not None:
+                log.append(entrada_log)
             st.warning(f"Error LLM en '{query}': {str(e)}")
             return []
 

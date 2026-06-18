@@ -181,6 +181,15 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
         detalle = st.empty()
         contador = st.empty()
 
+        from datetime import datetime as dt
+        log_busqueda = []
+        meta_busqueda = {
+            "zona": zona_info.get("display", ""),
+            "fecha": dt.now().strftime("%d/%m/%Y %H:%M"),
+            "provider": provider,
+            "motor": "Serper" if serper_key else ("Tavily" if tavily_key else "DuckDuckGo"),
+        }
+
         agentes = [
             ("Empresas privadas",
              EmpresasAgent(provider, api_key, tavily_key or None, serper_key or None),
@@ -209,8 +218,11 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             def cb_busqueda(msg, n=nombre):
                 detalle.caption(f"→ {msg}")
 
+            n_antes = len(log_busqueda)
             try:
-                actores = agente.run(zona_info, sectores, progress_callback=cb_busqueda)
+                actores = agente.run(zona_info, sectores, progress_callback=cb_busqueda, log=log_busqueda)
+                for entrada in log_busqueda[n_antes:]:
+                    entrada["categoria"] = nombre
                 resultados[nombre] = actores
                 indicadores[nombre].markdown(f"{ICONOS[nombre]} **{nombre.split()[0]}**\n\n✅ {len(actores)} actores")
             except Exception as e:
@@ -282,7 +294,11 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
         st.divider()
         fecha = datetime.now().strftime("%Y%m%d_%H%M")
         nombre_zona = zona_info.get("nombre", "zona").replace(" ", "_")
-        excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona))
+        # Añadir categoría a entradas de log sin ella
+        for entrada in log_busqueda:
+            if "categoria" not in entrada:
+                entrada["categoria"] = ""
+        excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona), log=log_busqueda, meta=meta_busqueda)
 
         st.download_button(
             label="📥 Descargar Excel",

@@ -320,7 +320,71 @@ DASHBOARD_FUNCIONES = {
 }
 
 
-def exportar_excel(resultados: dict, zona: str) -> bytes:
+def _escribir_trazabilidad(ws, log: list, meta: dict):
+    color = "37474F"
+    borde = _borde_fino()
+
+    ws.merge_cells("A1:G1")
+    c = ws["A1"]
+    c.value = f"Trazabilidad de búsqueda — {meta.get('zona', '')}"
+    c.font = Font(bold=True, size=13, color="FFFFFF")
+    c.fill = PatternFill("solid", fgColor=color)
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    # Resumen
+    ws.cell(row=2, column=1, value="Zona analizada").font = Font(bold=True)
+    ws.cell(row=2, column=2, value=meta.get("zona", ""))
+    ws.cell(row=3, column=1, value="Fecha y hora").font = Font(bold=True)
+    ws.cell(row=3, column=2, value=meta.get("fecha", ""))
+    ws.cell(row=4, column=1, value="Proveedor IA").font = Font(bold=True)
+    ws.cell(row=4, column=2, value=meta.get("provider", ""))
+    ws.cell(row=5, column=1, value="Motor de búsqueda").font = Font(bold=True)
+    ws.cell(row=5, column=2, value=meta.get("motor", ""))
+    ws.cell(row=6, column=1, value="Total queries lanzadas").font = Font(bold=True)
+    ws.cell(row=6, column=2, value=len(log))
+    ws.cell(row=7, column=1, value="Total resultados web procesados").font = Font(bold=True)
+    ws.cell(row=7, column=2, value=sum(e.get("resultados_web", 0) for e in log))
+    ws.cell(row=8, column=1, value="Total actores extraídos").font = Font(bold=True)
+    ws.cell(row=8, column=2, value=sum(e.get("actores_extraidos", 0) for e in log))
+
+    # Cabecera tabla
+    cabeceras = ["#", "Categoría", "Query lanzada", "Resultados web", "Actores extraídos", "Hora", "Estado"]
+    for col_idx, cab in enumerate(cabeceras, 1):
+        cell = ws.cell(row=10, column=col_idx, value=cab)
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = borde
+
+    # Filas de log
+    for i, entrada in enumerate(log, 1):
+        bg = "F5F5F5" if i % 2 == 0 else "FFFFFF"
+        estado = entrada.get("estado", "ok")
+        color_estado = "C8E6C9" if estado == "ok" else "FFCDD2"
+        fila = [
+            i,
+            entrada.get("categoria", ""),
+            entrada.get("query", ""),
+            entrada.get("resultados_web", 0),
+            entrada.get("actores_extraidos", 0),
+            entrada.get("timestamp", ""),
+            estado,
+        ]
+        for col_idx, val in enumerate(fila, 1):
+            cell = ws.cell(row=10+i, column=col_idx, value=val)
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.fill = PatternFill("solid", fgColor=color_estado if col_idx == 7 else bg)
+            cell.border = borde
+
+    anchos = [5, 22, 55, 16, 18, 10, 20]
+    for col_idx, ancho in enumerate(anchos, 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = ancho
+
+    ws.freeze_panes = "A11"
+
+
+def exportar_excel(resultados: dict, zona: str, log: list = None, meta: dict = None) -> bytes:
     wb = Workbook()
     wb.remove(wb.active)
 
@@ -333,9 +397,13 @@ def exportar_excel(resultados: dict, zona: str) -> bytes:
         _escribir_hoja_datos(ws_data, categoria, actores, zona)
 
         # Hoja de dashboard
-        dash_title = f"📊 {categoria[:22]}"
+        dash_title = f"Dashboard {categoria[:20]}"
         ws_dash = wb.create_sheet(title=dash_title)
         DASHBOARD_FUNCIONES[categoria](ws_dash, actores, zona, color)
+
+    # Hoja de trazabilidad
+    ws_traz = wb.create_sheet(title="Trazabilidad")
+    _escribir_trazabilidad(ws_traz, log or [], meta or {"zona": zona})
 
     buffer = io.BytesIO()
     wb.save(buffer)
