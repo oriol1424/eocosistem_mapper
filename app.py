@@ -410,23 +410,23 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
         meta_busqueda["categoria_parada"] = categoria_parada
         excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona), log=log_busqueda, meta=meta_busqueda)
 
+        import zipfile, io as _io
         html_content = exportar_html(resultados, zona_info.get("display", nombre_zona), meta=meta_busqueda)
         nombre_html = f"ecosistema_{nombre_zona}_{fecha}.html"
+        nombre_xlsx = f"ecosistema_{nombre_zona}_{fecha}.xlsx"
 
-        col_dl1, col_dl2 = st.columns(2)
-        col_dl1.download_button(
-            label="📥 Descargar Excel",
-            data=excel_bytes,
-            file_name=f"ecosistema_{nombre_zona}_{fecha}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        zip_buffer = _io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(nombre_xlsx, excel_bytes)
+            zf.writestr(nombre_html, html_content.encode("utf-8"))
+        zip_buffer.seek(0)
+
+        st.download_button(
+            label="📦 Descargar Excel + Dashboard HTML",
+            data=zip_buffer.getvalue(),
+            file_name=f"ecosistema_{nombre_zona}_{fecha}.zip",
+            mime="application/zip",
             type="primary",
             use_container_width=True
         )
-        col_dl2.download_button(
-            label="📊 Descargar Dashboard HTML",
-            data=html_content.encode("utf-8"),
-            file_name=nombre_html,
-            mime="text/html",
-            use_container_width=True
-        )
-        st.caption("💡 Guarda ambos archivos en la misma carpeta. Abre el HTML en el navegador para ver los dashboards interactivos.")
+        st.caption("💡 Descomprime el ZIP. Abre el .html en el navegador para los dashboards interactivos y el .xlsx para los datos completos.")
