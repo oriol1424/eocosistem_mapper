@@ -255,7 +255,39 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             total_encontrados = sum(len(v) for v in resultados.values())
             contador.metric("Actores encontrados", total_encontrados)
 
-        # ── FASE 2: Coordinador ───────────────────────────────────────────
+        # ── FASE 2: Enriquecimiento ───────────────────────────────────────
+        if enriquecer:
+            for i, (nombre, _, _) in enumerate(agentes):
+                if nombre not in resultados or not resultados[nombre]:
+                    fase_actual += 1
+                    barra_global.progress(fase_actual / total_fases)
+                    continue
+                actores_cat = resultados[nombre]
+                total_cat = len(actores_cat)
+                estado_global.info(f"📍 Enriqueciendo: **{nombre}**")
+                barra_enrich = st.progress(0)
+                detalle_enrich = st.empty()
+
+                def cb_enrich(idx, total, actor_nombre, bar=barra_enrich, det=detalle_enrich, n=nombre):
+                    pct = int((idx + 1) / total * 100) if total > 0 else 0
+                    bar.progress(pct / 100)
+                    det.caption(f"→ {n}: {actor_nombre} ({idx+1}/{total})")
+
+                try:
+                    resultados[nombre] = enriquecer_lista(
+                        actores_cat, nombre, zona_info,
+                        opencage_key=opencage_key or None,
+                        progress_callback=cb_enrich
+                    )
+                    barra_enrich.progress(1.0)
+                    detalle_enrich.caption(f"✅ {nombre}: {total_cat} actores enriquecidos")
+                except Exception as e:
+                    st.warning(f"Error enriqueciendo {nombre}: {str(e)}")
+
+                fase_actual += 1
+                barra_global.progress(fase_actual / total_fases)
+
+        # ── FASE 3: Coordinador ───────────────────────────────────────────
         if usar_coordinador:
             estado_global.info("🔄 Coordinador revisando clasificaciones...")
             detalle.caption("→ Revisando actores mal clasificados entre categorías...")
@@ -266,8 +298,6 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
                 st.warning(f"Error en coordinador: {str(e)}")
             fase_actual += 1
             barra_global.progress(fase_actual / total_fases)
-
-
 
         barra_global.progress(1.0)
         if tokens_agotados:
