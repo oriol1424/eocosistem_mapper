@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 import streamlit as st
 from tools.search import search_web, format_results_for_llm
 from tools.llm import get_llm_response
@@ -9,14 +10,22 @@ Extrae información estructurada sobre actores a partir de resultados de búsque
 Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin explicaciones.
 No uses caracteres de escape innecesarios."""
 
-EXTRACTION_PROMPT = """Estás mapeando el ecosistema de: {zona_nombre}
-País: {pais} | Región/Ciudad: {contexto} | Nivel: {nivel}
+REGLAS_POR_NIVEL = {
+    "Barrio":   "Solo extrae actores físicamente ubicados en el barrio {zona}. Si el actor está en otro barrio o zona de la ciudad → DESCÁRTALO. Sé muy estricto.",
+    "Distrito": "Solo extrae actores físicamente ubicados en el distrito {zona}. Si el actor está en otro distrito o municipio → DESCÁRTALO. Sé muy estricto.",
+    "Ciudad":   "Solo extrae actores ubicados en {zona} o su área metropolitana inmediata. Si el actor está en otra ciudad claramente diferente → DESCÁRTALO.",
+    "Comarca":  "Solo extrae actores de la comarca {zona} o municipios que la integran. Si está en otra comarca → DESCÁRTALO.",
+    "Región":   "Solo extrae actores de la región {zona}. Si está claramente en otra región → DESCÁRTALO.",
+    "País":     "Solo extrae actores del país {zona}. Si está en otro país → DESCÁRTALO.",
+}
 
-REGLA CRÍTICA DE UBICACIÓN: Solo extrae actores que estén CLARAMENTE ubicados en {zona_nombre} o en su municipio/ciudad inmediata ({contexto}).
-- Si un actor menciona otra ciudad, región o país diferente → DESCÁRTALO
-- Si la ubicación del actor es ambigua o no se menciona → DESCÁRTALO
-- Si el nombre de la zona aparece como apellido de persona o nombre de otro lugar → DESCÁRTALO
-- Prioriza actores con dirección, web o descripción que confirme su ubicación en {zona_nombre}
+EXTRACTION_PROMPT = """Estás mapeando el ecosistema de: {zona_nombre}
+País: {pais} | Contexto: {contexto} | Nivel: {nivel}
+
+REGLA CRÍTICA DE UBICACIÓN:
+{regla_ubicacion}
+- Si el nombre de la zona aparece como apellido o nombre de otro lugar → DESCÁRTALO
+- Prioriza actores con dirección, web o descripción que confirme su ubicación
 
 Resultados de búsqueda sobre "{query}":
 {results}
@@ -24,14 +33,12 @@ Resultados de búsqueda sobre "{query}":
 Para empresas indica si es startup, pyme, multinacional, cooperativa o autónomo.
 Para academia indica si es universidad, máster, doctorado, FP, instituto u otro centro.
 
-ACTIVIDADES EXTRA: Si un actor tiene actividades secundarias relevantes de OTRA categoría, indícalo en el campo "extras".
-Ejemplos de extras:
-- Un ayuntamiento que ofrece cursos → extras: {{"categoria": "Academia", "actividad": "Cursos y talleres municipales"}}
-- Una universidad con incubadora → extras: {{"categoria": "Empresas", "actividad": "Incubadora de startups"}}
-- Una empresa que gestiona equipamiento público → extras: {{"categoria": "Administración pública", "actividad": "Gestión equipamiento público"}}
-Solo añade extras si hay evidencia clara en los resultados. Si no hay extras, omite el campo.
+ACTIVIDADES EXTRA: Si un actor tiene actividades secundarias de OTRA categoría, indícalo en "extras":
+- Ayuntamiento que ofrece cursos → extras: {{"categoria": "Academia", "actividad": "Cursos y talleres municipales"}}
+- Universidad con incubadora → extras: {{"categoria": "Empresas", "actividad": "Incubadora de startups"}}
+Solo añade extras si hay evidencia clara. Si no hay extras, omite el campo.
 
-JSON con esta estructura exacta:
+JSON exacto:
 {{
   "actores": [
     {{
@@ -42,7 +49,7 @@ JSON con esta estructura exacta:
       "sector": "sector principal",
       "ubicacion": "dirección o zona específica confirmada",
       "contacto": "email o teléfono si aparece",
-      "extras": {{"categoria": "categoría extra si aplica", "actividad": "descripción actividad extra"}}
+      "extras": {{"categoria": "categoría extra si aplica", "actividad": "descripción"}}
     }}
   ]
 }}
@@ -90,11 +97,16 @@ class BaseAgent:
             return []
 
         formatted = format_results_for_llm(results)
+        nivel = zona_info.get("nivel", "Ciudad")
+        zona_nombre = zona_info.get("nombre", "")
+        regla = REGLAS_POR_NIVEL.get(nivel, REGLAS_POR_NIVEL["Ciudad"]).format(zona=zona_nombre)
+
         user_prompt = EXTRACTION_PROMPT.format(
-            zona_nombre=zona_info.get("nombre", ""),
+            zona_nombre=zona_nombre,
             pais=zona_info.get("pais", ""),
-            contexto=zona_info.get("contexto", "") or zona_info.get("nombre", ""),
-            nivel=zona_info.get("nivel", ""),
+            contexto=zona_info.get("contexto", "") or zona_nombre,
+            nivel=nivel,
+            regla_ubicacion=regla,
             query=query,
             results=formatted
         )
@@ -127,21 +139,30 @@ class BaseAgent:
                 entrada_log["estado"] = "tokens agotados"
                 if log is not None:
                     log.append(entrada_log)
-                raise  # propagar para detener el agente
+                raise
             entrada_log["estado"] = f"error: {msg[:50]}"
             if log is not None:
                 log.append(entrada_log)
             return []
 
+    def _normalizar_nombre(self, nombre: str) -> str:
+        nombre = nombre.lower().strip()
+        nombre = ''.join(c for c in unicodedata.normalize('NFD', nombre)
+                         if unicodedata.category(c) != 'Mn')
+        for sw in [" de ", " del ", " d'", " la ", " el ", " els ", " les ",
+                   " s.l.", " s.a.", " s.l.u.", " sl", " sa"]:
+            nombre = nombre.replace(sw, " ")
+        return ' '.join(nombre.split())
+
     def _deduplicate(self, actores: list[dict]) -> list[dict]:
         seen = set()
         unique = []
         for a in actores:
-            key = a.get("nombre", "").lower().strip()
+            key = self._normalizar_nombre(a.get("nombre", ""))
             if key and key not in seen:
                 seen.add(key)
                 unique.append(a)
         return unique
 
-    def run(self, zona_info: dict, sectores: list[str], progress_callback=None) -> list[dict]:
+    def run(self, zona_info: dict, sectores: list[str], progress_callback=None, log: list = None) -> list[dict]:
         raise NotImplementedError("Cada agente debe implementar run()")

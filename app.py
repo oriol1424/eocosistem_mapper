@@ -105,8 +105,19 @@ elif len(texto_zona) >= 3:
 if st.session_state.zona_info and not zona_info:
     zona_info = st.session_state.zona_info
 
+# ── SELECCIÓN DE AGENTES ─────────────────────────────────────────────────────
+st.header("2. Agentes a ejecutar")
+st.caption("Selecciona qué categorías quieres analizar.")
+
+col_ag1, col_ag2, col_ag3, col_ag4, col_ag5 = st.columns(5)
+ag_empresas  = col_ag1.toggle("🏢 Empresas",       value=True)
+ag_academia  = col_ag2.toggle("🎓 Academia",        value=True)
+ag_admin     = col_ag3.toggle("🏛️ Administración",  value=True)
+ag_sociedad  = col_ag4.toggle("🤝 Sociedad civil",  value=True)
+ag_incub     = col_ag5.toggle("🚀 Incubadoras",     value=True)
+
 # ── SECTORES ─────────────────────────────────────────────────────────────────
-st.header("2. Sectores prioritarios (opcional)")
+st.header("3. Sectores prioritarios (opcional)")
 
 with st.expander("🏢 Empresas privadas"):
     sectores_empresas = st.multiselect("Sectores", [
@@ -199,23 +210,21 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             "categoria_parada": "",
         }
 
-        agentes = [
-            ("Empresas privadas",
-             EmpresasAgent(provider, api_key, tavily_key or None, serper_key or None),
-             sectores_empresas),
-            ("Academia",
-             AcademiaAgent(provider, api_key, tavily_key or None, serper_key or None),
-             sectores_academia),
-            ("Administración pública",
-             AdministracionAgent(provider, api_key, tavily_key or None, serper_key or None),
-             sectores_admin),
-            ("Sociedad civil organizada",
-             SociedadAgent(provider, api_key, tavily_key or None, serper_key or None),
-             sectores_sociedad),
-            ("Incubadoras y aceleradoras",
-             IncubadorasAgent(provider, api_key, tavily_key or None, serper_key or None),
-             []),
-        ]
+        def _agente(cls, sects):
+            return cls(provider, api_key, tavily_key or None, serper_key or None), sects
+
+        agentes_posibles = []
+        if ag_empresas:
+            agentes_posibles.append(("Empresas privadas",   *_agente(EmpresasAgent, sectores_empresas)))
+        if ag_academia:
+            agentes_posibles.append(("Academia",            *_agente(AcademiaAgent, sectores_academia)))
+        if ag_admin:
+            agentes_posibles.append(("Administración pública", *_agente(AdministracionAgent, sectores_admin)))
+        if ag_sociedad:
+            agentes_posibles.append(("Sociedad civil organizada", *_agente(SociedadAgent, sectores_sociedad)))
+        if ag_incub:
+            agentes_posibles.append(("Incubadoras y aceleradoras", *_agente(IncubadorasAgent, [])))
+        agentes = agentes_posibles
 
         total_fases = len(agentes) + (len(agentes) if enriquecer else 0) + (1 if usar_coordinador else 0)
         fase_actual = 0

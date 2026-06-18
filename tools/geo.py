@@ -199,37 +199,76 @@ def _construir_contexto(props: dict) -> str:
     return ", ".join(partes)
 
 
+def _zona_busqueda(zona_info: dict) -> tuple[str, str]:
+    """
+    Devuelve (zona_especifica, zona_contexto) según el nivel.
+    Para distritos y barrios usa el nombre exacto del distrito.
+    Para ciudades y superiores usa solo el nombre.
+    """
+    nombre = zona_info.get("nombre", "")
+    nivel = zona_info.get("nivel", "Ciudad")
+    ciudad = ""
+
+    contexto = zona_info.get("contexto", "")
+    if contexto:
+        partes = [p.strip() for p in contexto.split(",")]
+        if partes:
+            ciudad = partes[0]
+
+    if nivel in ["Barrio", "Distrito"] and ciudad and ciudad != nombre:
+        zona_esp = f"{nombre} {ciudad}"
+        zona_ctx = ciudad
+    else:
+        zona_esp = nombre
+        zona_ctx = nombre
+
+    return zona_esp, zona_ctx
+
+
 def get_queries(categoria: str, zona_info: dict, sectores: list[str] = None) -> list[str]:
     idioma = zona_info.get("idioma", "en")
     if idioma not in QUERIES_POR_IDIOMA:
         idioma = "en"
 
     plantillas = QUERIES_POR_IDIOMA[idioma]
-    nombre = zona_info.get("nombre", "")
+    zona_esp, zona_ctx = _zona_busqueda(zona_info)
+    nivel = zona_info.get("nivel", "Ciudad")
     queries = []
 
     if categoria == "empresas":
         for t in plantillas["empresas_general"]:
-            queries.append(t.format(zona=nombre))
+            queries.append(t.format(zona=zona_esp))
+        if nivel in ["Barrio", "Distrito"]:
+            for t in plantillas["empresas_general"][:3]:
+                queries.append(t.format(zona=zona_ctx))
         for s in (sectores or [])[:6]:
-            queries.append(plantillas["empresas_sector"].format(sector=s.lower(), zona=nombre))
+            queries.append(plantillas["empresas_sector"].format(sector=s.lower(), zona=zona_esp))
 
     elif categoria == "academia":
         for t in plantillas["academia_general"]:
-            queries.append(t.format(zona=nombre))
+            queries.append(t.format(zona=zona_esp))
+        if nivel in ["Barrio", "Distrito"]:
+            for t in plantillas["academia_general"][:4]:
+                queries.append(t.format(zona=zona_ctx))
         if sectores:
             for s in sectores[:3]:
-                queries.append(f"{s.lower()} {nombre}")
+                queries.append(f"{s.lower()} {zona_esp}")
 
     elif categoria == "administracion":
         for t in plantillas["administracion"]:
-            queries.append(t.format(zona=nombre))
+            queries.append(t.format(zona=zona_esp))
+        if nivel in ["Barrio", "Distrito"]:
+            for t in plantillas["administracion"][:3]:
+                queries.append(t.format(zona=zona_ctx))
 
     elif categoria == "sociedad":
         for t in plantillas["sociedad"]:
-            queries.append(t.format(zona=nombre))
+            queries.append(t.format(zona=zona_esp))
+        if nivel in ["Barrio", "Distrito"]:
+            for t in plantillas["sociedad"][:3]:
+                queries.append(t.format(zona=zona_ctx))
         if sectores:
             for s in sectores[:3]:
-                queries.append(f"asociación {s.lower()} {nombre}")
+                queries.append(f"asociación {s.lower()} {zona_esp}")
 
-    return queries
+    return list(dict.fromkeys(queries))  # eliminar duplicados manteniendo orden
