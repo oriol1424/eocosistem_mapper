@@ -32,8 +32,17 @@ with st.sidebar:
     st.caption("🔒 Solo se usa en esta sesión.")
 
     st.divider()
-    st.subheader("Búsqueda web (opcional)")
-    st.caption("Sin keys usa DuckDuckGo gratis.")
+    st.subheader("Búsqueda web")
+    st.info(
+        "**Recomendado para mejores resultados:**\n\n"
+        "🥇 **Serper** — Filtra por país e idioma automáticamente. "
+        "Resultados mucho más precisos geográficamente. "
+        "Gratis en [serper.dev](https://serper.dev) (2.500/mes)\n\n"
+        "🥈 **Tavily** — Buena alternativa. "
+        "Gratis en [tavily.com](https://tavily.com) (1.000/mes)\n\n"
+        "⚠️ Sin keys usa DuckDuckGo gratis pero sin filtro geográfico — "
+        "puede devolver resultados de otras zonas con el mismo nombre."
+    )
     tavily_key = st.text_input("Tavily API Key", type="password", placeholder="tvly-...")
     serper_key = st.text_input("Serper API Key", type="password", placeholder="...")
 

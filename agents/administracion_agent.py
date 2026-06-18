@@ -1,7 +1,6 @@
 from agents.base_agent import BaseAgent
 from tools.geo import get_queries
 
-
 class AdministracionAgent(BaseAgent):
     def run(self, zona_info: dict, sectores: list[str], progress_callback=None) -> list[dict]:
         queries = get_queries("administracion", zona_info, sectores)
@@ -9,7 +8,7 @@ class AdministracionAgent(BaseAgent):
         for q in queries:
             if progress_callback:
                 progress_callback(q)
-            actores = self._search_and_extract(q)
+            actores = self._search_and_extract(q, zona_info)
             for a in actores:
                 a["categoria"] = "Administración pública"
             todos.extend(actores)
