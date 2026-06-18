@@ -107,7 +107,7 @@ def _metrica(ws, row, col, label, valor, color):
 
 
 def _escribir_tabla_conteo(ws, start_row, start_col, titulo, conteo, color, max_items=8):
-    ws.cell(row=start_row, column=start_col, value=titulo).font = Font(bold=True, size=10, color=color)
+    ws.cell(row=start_row, column=start_col, value=titulo).font = Font(bold=True, size=10, color="FF" + color)
     items = conteo.most_common(max_items)
     for i, (label, count) in enumerate(items):
         ws.cell(row=start_row+1+i, column=start_col, value=label or "Sin clasificar")
@@ -154,7 +154,7 @@ def _dashboard_empresas(ws, actores, zona, color):
     _celda_titulo(ws, 1, f"Dashboard Empresas Privadas — {zona}", color)
 
     total = len(actores)
-    _metrica(ws, 3, 1, "Total empresas", total, f"#{color}")
+    _metrica(ws, 3, 1, "Total empresas", total, "FF" + color)
 
     sectores = Counter(a.get("sector", "") or "Sin sector" for a in actores)
     tipos = Counter(a.get("tipo", "") or "Sin tipo" for a in actores)
@@ -188,7 +188,7 @@ def _dashboard_academia(ws, actores, zona, color):
     _celda_titulo(ws, 1, f"Dashboard Academia — {zona}", color)
 
     total = len(actores)
-    _metrica(ws, 3, 1, "Total centros", total, f"#{color}")
+    _metrica(ws, 3, 1, "Total centros", total, "FF" + color)
 
     tipos = Counter(a.get("tipo", "") or "Sin tipo" for a in actores)
 
@@ -231,7 +231,7 @@ def _dashboard_administracion(ws, actores, zona, color):
     _celda_titulo(ws, 1, f"Dashboard Administración Pública — {zona}", color)
 
     total = len(actores)
-    _metrica(ws, 3, 1, "Total entidades", total, f"#{color}")
+    _metrica(ws, 3, 1, "Total entidades", total, "FF" + color)
 
     tipos = Counter(a.get("tipo", "") or "Sin tipo" for a in actores)
 
@@ -272,7 +272,7 @@ def _dashboard_sociedad(ws, actores, zona, color):
     _celda_titulo(ws, 1, f"Dashboard Sociedad Civil Organizada — {zona}", color)
 
     total = len(actores)
-    _metrica(ws, 3, 1, "Total organizaciones", total, f"#{color}")
+    _metrica(ws, 3, 1, "Total organizaciones", total, "FF" + color)
 
     tipos = Counter(a.get("tipo", "") or "Sin tipo" for a in actores)
     sectores = Counter(a.get("sector", "") or "Sin sector" for a in actores)
