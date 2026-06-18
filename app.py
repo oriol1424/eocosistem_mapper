@@ -287,12 +287,15 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
         # ── RESULTADOS ────────────────────────────────────────────────────
         st.header("Resultados")
 
-        cols = st.columns(4)
-        for idx, (cat, actores) in enumerate(resultados.items()):
-            cols[idx].metric(f"{ICONOS[cat]} {cat.split()[0]}", len(actores))
+        cats_list = list(resultados.items())
+        cols = st.columns(len(cats_list))
+        for idx, (cat, actores) in enumerate(cats_list):
+            ico = ICONOS.get(cat, "📋")
+            cols[idx].metric(f"{ico} {cat.split()[0]}", len(actores))
 
         for categoria, actores in resultados.items():
-            with st.expander(f"{ICONOS[categoria]} {categoria} — {len(actores)} actores"):
+            ico = ICONOS.get(categoria, "📋")
+            with st.expander(f"{ico} {categoria} — {len(actores)} actores"):
                 if actores:
                     st.dataframe(actores, use_container_width=True)
                 else:
