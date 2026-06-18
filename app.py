@@ -7,6 +7,7 @@ from agents.academia_agent import AcademiaAgent
 from agents.administracion_agent import AdministracionAgent
 from agents.sociedad_agent import SociedadAgent
 from agents.coordinator import coordinar
+from agents.incubadoras_agent import IncubadorasAgent
 from exporter import exportar_excel
 
 st.set_page_config(page_title="Mapeador de Ecosistemas", page_icon="🗺️", layout="wide")
@@ -149,6 +150,7 @@ ICONOS = {
     "Academia": "🎓",
     "Administración pública": "🏛️",
     "Sociedad civil organizada": "🤝",
+    "Incubadoras y aceleradoras": "🚀",
 }
 
 if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True):
@@ -161,22 +163,25 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             "Empresas privadas": [],
             "Academia": [],
             "Administración pública": [],
-            "Sociedad civil organizada": []
+            "Sociedad civil organizada": [],
+            "Incubadoras y aceleradoras": [],
         }
 
         # ── UI de progreso ────────────────────────────────────────────────
         barra_global = st.progress(0)
         estado_global = st.empty()
 
-        col_e, col_a, col_ad, col_s = st.columns(4)
+        col_e, col_a, col_ad, col_s, col_i = st.columns(5)
         indicadores = {
             "Empresas privadas":        col_e.empty(),
             "Academia":                 col_a.empty(),
             "Administración pública":   col_ad.empty(),
             "Sociedad civil organizada":col_s.empty(),
+            "Incubadoras y aceleradoras": col_i.empty(),
         }
         for cat, ind in indicadores.items():
-            ind.markdown(f"{ICONOS[cat]} **{cat.split()[0]}**\n\n⬜ Pendiente")
+            ico = ICONOS.get(cat, "🚀")
+            ind.markdown(f"{ico} **{cat.split()[0]}**\n\n⬜ Pendiente")
 
         detalle = st.empty()
         contador = st.empty()
@@ -203,6 +208,9 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
             ("Sociedad civil organizada",
              SociedadAgent(provider, api_key, tavily_key or None, serper_key or None),
              sectores_sociedad),
+            ("Incubadoras y aceleradoras",
+             IncubadorasAgent(provider, api_key, tavily_key or None, serper_key or None),
+             []),
         ]
 
         total_fases = len(agentes) + (len(agentes) if enriquecer else 0) + (1 if usar_coordinador else 0)

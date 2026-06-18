@@ -320,6 +320,157 @@ DASHBOARD_FUNCIONES = {
 }
 
 
+def _escribir_hoja_extras(ws, resultados: dict):
+    color = "546E7A"
+    borde = _borde_fino()
+
+    ws.merge_cells("A1:G1")
+    c = ws["A1"]
+    c.value = "Extras — Actores con actividades en otras categorías"
+    c.font = Font(bold=True, size=13, color="FFFFFF")
+    c.fill = PatternFill("solid", fgColor=color)
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    cabeceras = ["Nombre", "Categoría principal", "Extra de", "Actividad extra", "Web", "Descripción", "Ubicación"]
+    for col_idx, cab in enumerate(cabeceras, 1):
+        cell = ws.cell(row=2, column=col_idx, value=cab)
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.font = Font(bold=True, color="FFFFFF", size=11)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = borde
+    ws.row_dimensions[2].height = 22
+
+    row = 3
+    for categoria, actores in resultados.items():
+        if categoria in ["Incubadoras y aceleradoras"]:
+            continue
+        for actor in actores:
+            extras = actor.get("extras")
+            if not extras or not isinstance(extras, dict):
+                continue
+            cat_extra = extras.get("categoria", "")
+            actividad = extras.get("actividad", "")
+            if not cat_extra or not actividad:
+                continue
+            bg = "FFF8E1" if row % 2 == 0 else "FFFFFF"
+            fila = [
+                actor.get("nombre", ""),
+                categoria,
+                cat_extra,
+                actividad,
+                actor.get("web", ""),
+                actor.get("descripcion", ""),
+                actor.get("ubicacion", ""),
+            ]
+            for col_idx, val in enumerate(fila, 1):
+                cell = ws.cell(row=row, column=col_idx, value=val or "")
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+                cell.fill = PatternFill("solid", fgColor=bg)
+                cell.border = borde
+            row += 1
+
+    if row == 3:
+        ws.cell(row=3, column=1, value="No se detectaron actores con actividades en otras categorías.")
+
+    anchos = [30, 24, 24, 35, 35, 50, 20]
+    for col_idx, ancho in enumerate(anchos, 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = ancho
+    ws.freeze_panes = "A3"
+    if row > 3:
+        ws.auto_filter.ref = f"A2:G{row-1}"
+
+
+def _escribir_hoja_incubadoras(ws, actores: list, zona: str):
+    color = "00695C"
+    borde = _borde_fino()
+
+    ws.merge_cells("A1:H1")
+    c = ws["A1"]
+    c.value = f"Incubadoras y aceleradoras — {zona}"
+    c.font = Font(bold=True, size=13, color="FFFFFF")
+    c.fill = PatternFill("solid", fgColor=color)
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 28
+
+    cabeceras = ["Nombre", "Tipo", "Titularidad", "Sector", "Descripción", "Web", "Ubicación", "Contacto"]
+    for col_idx, cab in enumerate(cabeceras, 1):
+        cell = ws.cell(row=2, column=col_idx, value=cab)
+        cell.fill = PatternFill("solid", fgColor=color)
+        cell.font = Font(bold=True, color="FFFFFF", size=11)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = borde
+    ws.row_dimensions[2].height = 22
+
+    for row_idx, actor in enumerate(actores, 3):
+        bg = "E8F5E9" if row_idx % 2 == 0 else "FFFFFF"
+        fila = [
+            actor.get("nombre", ""),
+            actor.get("tipo", ""),
+            actor.get("titularidad", ""),
+            actor.get("sector", ""),
+            actor.get("descripcion", ""),
+            actor.get("web", ""),
+            actor.get("ubicacion", ""),
+            actor.get("contacto", ""),
+        ]
+        for col_idx, val in enumerate(fila, 1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val or "")
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.fill = PatternFill("solid", fgColor=bg)
+            cell.border = borde
+
+    anchos = [30, 18, 14, 18, 50, 35, 25, 20]
+    for col_idx, ancho in enumerate(anchos, 1):
+        ws.column_dimensions[get_column_letter(col_idx)].width = ancho
+    ws.freeze_panes = "A3"
+    if actores:
+        ws.auto_filter.ref = f"A2:H{len(actores)+2}"
+    if not actores:
+        ws.cell(row=3, column=1, value="No se encontraron incubadoras o aceleradoras.")
+
+
+def _dashboard_incubadoras(ws, actores: list, zona: str):
+    color = "00695C"
+    _celda_titulo(ws, 1, f"Dashboard Incubadoras y Aceleradoras — {zona}", color)
+
+    total = len(actores)
+    _metrica(ws, 3, 1, "Total encontradas", total, "FF" + color)
+
+    publicas = sum(1 for a in actores if "púb" in (a.get("titularidad","") or "").lower())
+    privadas = sum(1 for a in actores if "priv" in (a.get("titularidad","") or "").lower())
+    mixtas = sum(1 for a in actores if "mixt" in (a.get("titularidad","") or "").lower())
+    otros = total - publicas - privadas - mixtas
+
+    titul_data = [("Pública", publicas), ("Privada", privadas), ("Mixta", mixtas), ("Sin clasificar", max(otros,0))]
+
+    _celda_subtitulo(ws, 6, 1, "Por titularidad", color)
+    for i, (label, val) in enumerate(titul_data):
+        ws.cell(row=7+i, column=1, value=label)
+        ws.cell(row=7+i, column=2, value=val)
+
+    tipos = Counter(a.get("tipo","") or "Sin tipo" for a in actores)
+    _celda_subtitulo(ws, 6, 4, "Por tipo", color)
+    _escribir_tabla_conteo(ws, 6, 4, "Por tipo", tipos, color)
+
+    sectores = Counter(a.get("sector","") or "Sin sector" for a in actores)
+    _celda_subtitulo(ws, 6, 7, "Por sector", color)
+    _escribir_tabla_conteo(ws, 6, 7, "Por sector", sectores, color)
+
+    if total > 0:
+        _grafico_pie(ws, 7, 10, 1, 2, "Pública vs Privada", "A14")
+        _grafico_barras(ws, 7, 7+min(len(tipos)-1,7), 4, 5, "Tipos de espacio", "J14", color)
+
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 10
+    ws.column_dimensions["C"].width = 4
+    ws.column_dimensions["D"].width = 20
+    ws.column_dimensions["E"].width = 10
+    ws.column_dimensions["F"].width = 4
+    ws.column_dimensions["G"].width = 20
+    ws.column_dimensions["H"].width = 10
+
+
 def _escribir_trazabilidad(ws, log: list, meta: dict):
     color = "37474F"
     borde = _borde_fino()
@@ -388,20 +539,31 @@ def exportar_excel(resultados: dict, zona: str, log: list = None, meta: dict = N
     wb = Workbook()
     wb.remove(wb.active)
 
+    # Hojas por categoría principal
     for categoria in CATEGORIAS:
         actores = resultados.get(categoria, [])
         color = COLORES_CABECERA[categoria]
 
-        # Hoja de datos
         ws_data = wb.create_sheet(title=categoria[:31])
         _escribir_hoja_datos(ws_data, categoria, actores, zona)
 
-        # Hoja de dashboard
         dash_title = f"Dashboard {categoria[:20]}"
         ws_dash = wb.create_sheet(title=dash_title)
         DASHBOARD_FUNCIONES[categoria](ws_dash, actores, zona, color)
 
-    # Hoja de trazabilidad
+    # Hoja Extras
+    ws_extras = wb.create_sheet(title="Extras")
+    _escribir_hoja_extras(ws_extras, resultados)
+
+    # Hoja Incubadoras y aceleradoras
+    incubadoras = resultados.get("Incubadoras y aceleradoras", [])
+    ws_incub = wb.create_sheet(title="Incubadoras y aceleradoras")
+    _escribir_hoja_incubadoras(ws_incub, incubadoras, zona)
+
+    ws_dash_incub = wb.create_sheet(title="Dashboard Incubadoras")
+    _dashboard_incubadoras(ws_dash_incub, incubadoras, zona)
+
+    # Hoja Trazabilidad
     ws_traz = wb.create_sheet(title="Trazabilidad")
     _escribir_trazabilidad(ws_traz, log or [], meta or {"zona": zona})
 

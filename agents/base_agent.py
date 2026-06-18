@@ -24,6 +24,13 @@ Resultados de búsqueda sobre "{query}":
 Para empresas indica si es startup, pyme, multinacional, cooperativa o autónomo.
 Para academia indica si es universidad, máster, doctorado, FP, instituto u otro centro.
 
+ACTIVIDADES EXTRA: Si un actor tiene actividades secundarias relevantes de OTRA categoría, indícalo en el campo "extras".
+Ejemplos de extras:
+- Un ayuntamiento que ofrece cursos → extras: {{"categoria": "Academia", "actividad": "Cursos y talleres municipales"}}
+- Una universidad con incubadora → extras: {{"categoria": "Empresas", "actividad": "Incubadora de startups"}}
+- Una empresa que gestiona equipamiento público → extras: {{"categoria": "Administración pública", "actividad": "Gestión equipamiento público"}}
+Solo añade extras si hay evidencia clara en los resultados. Si no hay extras, omite el campo.
+
 JSON con esta estructura exacta:
 {{
   "actores": [
@@ -34,7 +41,8 @@ JSON con esta estructura exacta:
       "web": "https://url.com o vacío",
       "sector": "sector principal",
       "ubicacion": "dirección o zona específica confirmada",
-      "contacto": "email o teléfono si aparece"
+      "contacto": "email o teléfono si aparece",
+      "extras": {{"categoria": "categoría extra si aplica", "actividad": "descripción actividad extra"}}
     }}
   ]
 }}
