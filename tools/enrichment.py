@@ -21,12 +21,34 @@ def _osm_pause():
         _last_osm_call[0] = time.time()
 
 
-def _buscar_osm_nominatim(nombre: str, zona_info: dict) -> dict:
-    """Busca dirección via OSM Nominatim."""
+def _construir_query_geocode(actor: dict, zona_info: dict) -> str:
+    """
+    Construye la query de geocodificación priorizando la dirección extraída por el LLM.
+    Si hay dirección usa esa — es mucho más precisa que solo el nombre.
+    Si no hay dirección usa nombre + contexto geográfico.
+    """
+    direccion = actor.get("direccion") or actor.get("ubicacion") or ""
+    nombre = actor.get("nombre", "")
+    pais = zona_info.get("pais", "")
+    ciudad = zona_info.get("ciudad", "") or zona_info.get("contexto", "").split(",")[0].strip()
+
+    if direccion and len(direccion) > 5:
+        # Tenemos dirección — usarla directamente, añadir ciudad si no está incluida
+        if ciudad and ciudad.lower() not in direccion.lower():
+            return f"{direccion}, {ciudad}"
+        return direccion
+    else:
+        # Sin dirección — usar nombre + ciudad para dar contexto geográfico
+        if ciudad:
+            return f"{nombre}, {ciudad}, {pais}".strip(", ")
+        return f"{nombre}, {pais}".strip(", ")
+
+
+def _buscar_osm_nominatim(actor: dict, zona_info: dict) -> dict:
+    """Busca coordenadas via OSM Nominatim usando dirección si está disponible."""
     try:
         _osm_pause()
-        pais = zona_info.get("pais", "")
-        query = f"{nombre}, {pais}".strip(", ")
+        query = _construir_query_geocode(actor, zona_info)
         params = {
             "q": query,
             "format": "json",
@@ -39,22 +61,24 @@ def _buscar_osm_nominatim(nombre: str, zona_info: dict) -> dict:
             return {}
         item = data[0]
         addr = item.get("address", {})
-        return {
-            "direccion": _formatear_direccion_osm(addr),
+        result = {
             "lat": float(item.get("lat", 0)),
             "lon": float(item.get("lon", 0)),
         }
+        # Solo sobreescribir dirección si el actor no tenía una
+        if not actor.get("direccion"):
+            result["direccion"] = _formatear_direccion_osm(addr)
+        return result
     except Exception:
         return {}
 
 
-def _buscar_opencage(nombre: str, zona_info: dict, api_key: str) -> dict:
-    """Busca dirección via OpenCage."""
+def _buscar_opencage(actor: dict, zona_info: dict, api_key: str) -> dict:
+    """Busca coordenadas via OpenCage usando dirección si está disponible."""
     if not api_key:
         return {}
     try:
-        pais = zona_info.get("pais", "")
-        query = f"{nombre}, {pais}".strip(", ")
+        query = _construir_query_geocode(actor, zona_info)
         params = {
             "q": query,
             "key": api_key,
@@ -70,11 +94,13 @@ def _buscar_opencage(nombre: str, zona_info: dict, api_key: str) -> dict:
         item = results[0]
         comp = item.get("components", {})
         geo = item.get("geometry", {})
-        return {
-            "direccion": _formatear_direccion_opencage(comp),
+        result = {
             "lat": geo.get("lat", 0),
             "lon": geo.get("lng", 0),
         }
+        if not actor.get("direccion"):
+            result["direccion"] = _formatear_direccion_opencage(comp)
+        return result
     except Exception:
         return {}
 
@@ -160,7 +186,8 @@ def _combinar_resultados(osm: dict, opencage: dict, overpass: dict) -> dict:
 
 
 def enriquecer_actor(actor: dict, categoria: str, zona_info: dict, opencage_key: str = None) -> dict:
-    """Enriquece un actor combinando OSM Nominatim + OpenCage + Overpass."""
+    """Enriquece un actor combinando OSM Nominatim + OpenCage + Overpass.
+    Prioriza la dirección ya extraída por el LLM para geocodificar con precisión."""
     nombre = actor.get("nombre", "")
     if not nombre:
         return actor
@@ -171,14 +198,14 @@ def enriquecer_actor(actor: dict, categoria: str, zona_info: dict, opencage_key:
 
     if categoria == "Administración pública":
         overpass_result = _buscar_osm_overpass(nombre, zona_info)
-        if not overpass_result.get("direccion"):
-            osm_result = _buscar_osm_nominatim(nombre, zona_info)
+        if not overpass_result.get("lat"):
+            osm_result = _buscar_osm_nominatim(actor, zona_info)
             if opencage_key:
-                opencage_result = _buscar_opencage(nombre, zona_info, opencage_key)
+                opencage_result = _buscar_opencage(actor, zona_info, opencage_key)
     else:
-        osm_result = _buscar_osm_nominatim(nombre, zona_info)
+        osm_result = _buscar_osm_nominatim(actor, zona_info)
         if opencage_key:
-            opencage_result = _buscar_opencage(nombre, zona_info, opencage_key)
+            opencage_result = _buscar_opencage(actor, zona_info, opencage_key)
 
     enriched = _combinar_resultados(osm_result, opencage_result, overpass_result)
 
