@@ -122,10 +122,15 @@ class BaseAgent:
                     log.append(entrada_log)
                 return []
         except Exception as e:
-            entrada_log["estado"] = f"error: {str(e)[:50]}"
+            msg = str(e)
+            if "TOKENS_AGOTADOS" in msg:
+                entrada_log["estado"] = "tokens agotados"
+                if log is not None:
+                    log.append(entrada_log)
+                raise  # propagar para detener el agente
+            entrada_log["estado"] = f"error: {msg[:50]}"
             if log is not None:
                 log.append(entrada_log)
-            st.warning(f"Error LLM en '{query}': {str(e)}")
             return []
 
     def _deduplicate(self, actores: list[dict]) -> list[dict]:

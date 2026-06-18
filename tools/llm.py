@@ -65,11 +65,15 @@ def get_llm_response(provider: str, api_key: str, system_prompt: str,
                 except Exception as e:
                     msg = str(e)
                     if "429" in msg or "rate_limit" in msg.lower():
+                        # Si es límite diario (TPD) no tiene sentido reintentar
+                        if "tokens per day" in msg.lower() or "TPD" in msg:
+                            raise RuntimeError(f"TOKENS_AGOTADOS: {msg}")
+                        # Si es límite por minuto (TPM) esperamos y reintentamos
                         espera = _extraer_espera_groq(msg)
                         time.sleep(espera)
                         continue
                     raise
-            raise RuntimeError("Groq: límite de rate alcanzado tras varios reintentos")
+            raise RuntimeError("TOKENS_AGOTADOS: Groq: límite diario de tokens alcanzado. Resultados parciales guardados.")
 
         elif provider == "openai":
             client = OpenAI(api_key=api_key)

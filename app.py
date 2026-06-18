@@ -188,11 +188,15 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
 
         from datetime import datetime as dt
         log_busqueda = []
+        tokens_agotados = False
+        categoria_parada = ""
         meta_busqueda = {
             "zona": zona_info.get("display", ""),
             "fecha": dt.now().strftime("%d/%m/%Y %H:%M"),
             "provider": provider,
             "motor": "Serper" if serper_key else ("Tavily" if tavily_key else "DuckDuckGo"),
+            "tokens_agotados": False,
+            "categoria_parada": "",
         }
 
         agentes = [
@@ -278,7 +282,10 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
                 barra_global.progress(fase_actual / total_fases)
 
         barra_global.progress(1.0)
-        estado_global.success("✅ Búsqueda completada")
+        if tokens_agotados:
+            estado_global.warning(f"⚠️ Búsqueda incompleta — tokens diarios agotados al llegar a **{categoria_parada}**. Descarga el Excel con los resultados parciales.")
+        else:
+            estado_global.success("✅ Búsqueda completada")
         detalle.empty()
 
         total_final = sum(len(v) for v in resultados.values())
@@ -309,6 +316,8 @@ if st.button("🚀 Iniciar búsqueda", type="primary", use_container_width=True)
         for entrada in log_busqueda:
             if "categoria" not in entrada:
                 entrada["categoria"] = ""
+        meta_busqueda["tokens_agotados"] = tokens_agotados
+        meta_busqueda["categoria_parada"] = categoria_parada
         excel_bytes = exportar_excel(resultados, zona_info.get("display", nombre_zona), log=log_busqueda, meta=meta_busqueda)
 
         st.download_button(

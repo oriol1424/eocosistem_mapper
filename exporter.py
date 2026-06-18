@@ -79,6 +79,7 @@ def _escribir_hoja_datos(ws, categoria, actores, zona):
         ws.auto_filter.ref = f"A2:{get_column_letter(len(columnas))}{len(actores)+2}"
     if not actores:
         ws.cell(row=3, column=1, value="No se encontraron actores para esta categoría.")
+        ws.cell(row=3, column=1).font = Font(italic=True, color="888888")
 
 
 def _celda_titulo(ws, row, texto, color):
@@ -499,6 +500,15 @@ def _escribir_trazabilidad(ws, log: list, meta: dict):
     ws.cell(row=8, column=1, value="Total actores extraídos").font = Font(bold=True)
     ws.cell(row=8, column=2, value=sum(e.get("actores_extraidos", 0) for e in log))
 
+    if meta.get("tokens_agotados"):
+        ws.merge_cells("A9:G9")
+        aviso = ws["A9"]
+        aviso.value = f"⚠️ BÚSQUEDA INCOMPLETA — Tokens diarios agotados al llegar a: {meta.get('categoria_parada', '')}. Las categorías siguientes están vacías por falta de tokens, no porque no existan actores."
+        aviso.font = Font(bold=True, color="FFFFFF", size=11)
+        aviso.fill = PatternFill("solid", fgColor="C62828")
+        aviso.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        ws.row_dimensions[9].height = 36
+
     # Cabecera tabla
     cabeceras = ["#", "Categoría", "Query lanzada", "Resultados web", "Actores extraídos", "Hora", "Estado"]
     for col_idx, cab in enumerate(cabeceras, 1):
@@ -540,12 +550,33 @@ def exportar_excel(resultados: dict, zona: str, log: list = None, meta: dict = N
     wb.remove(wb.active)
 
     # Hojas por categoría principal
+    tokens_agotados = (meta or {}).get("tokens_agotados", False)
+    categoria_parada = (meta or {}).get("categoria_parada", "")
+    categorias_vacias_por_tokens = set()
+    if tokens_agotados and categoria_parada:
+        encontrado = False
+        for cat in CATEGORIAS + ["Incubadoras y aceleradoras"]:
+            if encontrado:
+                categorias_vacias_por_tokens.add(cat)
+            if cat == categoria_parada:
+                encontrado = True
+
     for categoria in CATEGORIAS:
         actores = resultados.get(categoria, [])
         color = COLORES_CABECERA[categoria]
 
         ws_data = wb.create_sheet(title=categoria[:31])
         _escribir_hoja_datos(ws_data, categoria, actores, zona)
+
+        # Aviso en hoja vacía por tokens agotados
+        if not actores and categoria in categorias_vacias_por_tokens:
+            ws_data.merge_cells("A3:H3")
+            c = ws_data["A3"]
+            c.value = "⚠️ Sin datos — tokens diarios agotados antes de llegar a esta categoría. Vuelve a buscar mañana o cambia de proveedor de IA."
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = PatternFill("solid", fgColor="C62828")
+            c.alignment = Alignment(wrap_text=True)
+            ws_data.row_dimensions[3].height = 36
 
         dash_title = f"Dashboard {categoria[:20]}"
         ws_dash = wb.create_sheet(title=dash_title)
