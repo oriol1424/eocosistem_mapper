@@ -216,32 +216,53 @@ def enriquecer_actor(actor: dict, categoria: str, zona_info: dict, opencage_key:
     return actor
 
 
+def _punto_en_poligono(lat: float, lon: float, geometry: dict) -> bool:
+    """Comprueba si un punto está dentro del polígono real usando shapely."""
+    try:
+        from shapely.geometry import shape, Point
+        poligono = shape(geometry)
+        punto = Point(lon, lat)  # shapely usa (lon, lat)
+        return poligono.contains(punto) or poligono.touches(punto)
+    except Exception:
+        return None
+
+
 def _verificar_en_zona(actor: dict, zona_info: dict) -> str:
     """
-    Verifica si el actor está dentro de la zona usando coordenadas.
+    Verifica si el actor está dentro de la zona.
+    Prioridad: polígono real (preciso) > distancia circular (fallback).
     Devuelve: "dentro" / "fuera" / "sin_datos"
     """
     import math
 
     actor_lat = actor.get("lat", 0)
     actor_lon = actor.get("lon", 0)
-    zona_lat = zona_info.get("lat", 0)
-    zona_lon = zona_info.get("lon", 0)
 
-    if not actor_lat or not actor_lon or not zona_lat or not zona_lon:
+    if not actor_lat or not actor_lon:
         return "sin_datos"
 
-    # Distancia Haversine en km
+    # Método preciso: polígono real de la zona
+    geometry = zona_info.get("poligono", {}).get("geometry")
+    if geometry:
+        resultado = _punto_en_poligono(actor_lat, actor_lon, geometry)
+        if resultado is not None:
+            return "dentro" if resultado else "fuera"
+
+    # Fallback: distancia circular desde el centro (menos preciso)
+    zona_lat = zona_info.get("lat", 0)
+    zona_lon = zona_info.get("lon", 0)
+    if not zona_lat or not zona_lon:
+        return "sin_datos"
+
     R = 6371
     dlat = math.radians(actor_lat - zona_lat)
     dlon = math.radians(actor_lon - zona_lon)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(zona_lat)) * math.cos(math.radians(actor_lat)) * math.sin(dlon/2)**2
     distancia = R * 2 * math.asin(math.sqrt(a))
 
-    # Radio según nivel geográfico
     radios = {
-        "Barrio": 1.5,
-        "Distrito": 4.0,
+        "Barrio": 1.0,
+        "Distrito": 2.5,
         "Ciudad": 20.0,
         "Comarca": 50.0,
         "Región": 200.0,

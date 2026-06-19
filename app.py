@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from tools.geo import buscar_zonas
+from tools.geo import buscar_zonas, obtener_poligono_zona
 from tools.enrichment import enriquecer_lista
 from agents.empresas_agent import EmpresasAgent
 from agents.academia_agent import AcademiaAgent
@@ -157,11 +157,20 @@ if geoapify_key and len(texto_zona) >= 3:
         if seleccion != "— Selecciona una opción —":
             idx = labels.index(seleccion) - 1
             zona_info = opciones[idx]
+
+            # Obtener polígono real de la zona para verificación geográfica precisa
+            if "poligono" not in zona_info:
+                with st.spinner("Obteniendo límites geográficos exactos..."):
+                    poligono = obtener_poligono_zona(zona_info, geoapify_key)
+                    zona_info["poligono"] = poligono
+
             st.session_state.zona_info = zona_info
-            col_a, col_b, col_c = st.columns(3)
+            col_a, col_b, col_c, col_d = st.columns(4)
             col_a.metric("Nivel", zona_info["nivel"])
             col_b.metric("País", zona_info["pais"])
             col_c.metric("Idioma búsqueda", zona_info["idioma"].upper())
+            precision = "Polígono exacto" if zona_info.get("poligono", {}).get("geometry") else "Radio aproximado"
+            col_d.metric("Verificación", precision)
     else:
         st.warning("No se encontraron zonas. Prueba con otro nombre.")
 
@@ -170,9 +179,10 @@ elif len(texto_zona) >= 3:
         "display": texto_zona, "nombre": texto_zona,
         "pais": "", "pais_code": "", "nivel": "Ciudad",
         "idioma": "es", "contexto": "", "lat": 0, "lon": 0,
+        "poligono": {},
     }
     st.session_state.zona_info = zona_info
-    st.caption("Modo texto libre — añade Geoapify key para autocompletado.")
+    st.caption("Modo texto libre — añade Geoapify key para autocompletado y verificación geográfica precisa.")
 
 if st.session_state.zona_info and not zona_info:
     zona_info = st.session_state.zona_info

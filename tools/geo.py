@@ -162,10 +162,65 @@ def buscar_zonas(texto: str, geoapify_key: str) -> list[dict]:
                 "idioma": IDIOMAS_POR_PAIS.get(pais_code, "en"),
                 "contexto": contexto,
                 "ciudad": props.get("city") or props.get("town") or "",
+                "place_id": props.get("place_id", ""),
             })
         return resultados
     except Exception:
         return []
+
+
+def obtener_poligono_zona(zona_info: dict, geoapify_key: str) -> dict:
+    """
+    Obtiene el polígono real (GeoJSON) de la zona usando Geoapify Place Details.
+    Devuelve {"geometry": geojson_dict} o {} si no está disponible.
+    """
+    place_id = zona_info.get("place_id", "")
+    if not place_id or not geoapify_key:
+        return _obtener_poligono_osm(zona_info)
+
+    try:
+        url = "https://api.geoapify.com/v2/place-details"
+        params = {"id": place_id, "features": "details", "apiKey": geoapify_key}
+        r = requests.get(url, params=params, timeout=8)
+        data = r.json()
+        features = data.get("features", [])
+        if not features:
+            return _obtener_poligono_osm(zona_info)
+
+        geometry = features[0].get("geometry", {})
+        if geometry and geometry.get("type") in ["Polygon", "MultiPolygon"]:
+            return {"geometry": geometry}
+        return _obtener_poligono_osm(zona_info)
+    except Exception:
+        return _obtener_poligono_osm(zona_info)
+
+
+def _obtener_poligono_osm(zona_info: dict) -> dict:
+    """Fallback: obtiene el polígono via OSM Nominatim (gratis, sin key)."""
+    try:
+        import time as _time
+        nombre = zona_info.get("nombre", "")
+        contexto = zona_info.get("contexto", "")
+        query = f"{nombre}, {contexto}".strip(", ")
+
+        params = {
+            "q": query,
+            "format": "json",
+            "polygon_geojson": 1,
+            "limit": 1,
+        }
+        r = requests.get("https://nominatim.openstreetmap.org/search",
+                         params=params, headers=HEADERS, timeout=8)
+        _time.sleep(1.0)
+        data = r.json()
+        if not data:
+            return {}
+        geojson = data[0].get("geojson", {})
+        if geojson and geojson.get("type") in ["Polygon", "MultiPolygon"]:
+            return {"geometry": geojson}
+        return {}
+    except Exception:
+        return {}
 
 
 def _inferir_nivel(props: dict) -> str:
